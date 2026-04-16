@@ -1,7 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src"
+    "rootDir": ".."
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "../providers/src",
+    "../plugin-sdk/src",
+    "../attacks/src",
+    "../judges/src",
+    "../mcp-bridge/src"
+  ]
 }

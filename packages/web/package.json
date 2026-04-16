@@ -3,12 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
+    "@nullbunny/attacks": "workspace:*",
+    "@nullbunny/judges": "workspace:*",
+    "@nullbunny/mcp-bridge": "workspace:*",
+    "@nullbunny/plugin-sdk": "workspace:*",
     "playwright": "^1.55.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/build-binary.mjs web",
     "lint": "node -e \"process.exit(0)\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }

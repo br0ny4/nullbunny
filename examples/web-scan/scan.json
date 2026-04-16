@@ -1,0 +1,21 @@
+{
+  "id": "web-har-owasp-scan",
+  "target": "example-webapp",
+  "harPath": "../../reports/web.har",
+  "candidate": {
+    "urlContains": "/chat/completions"
+  },
+  "bridge": {
+    "manifestPaths": ["../extensions/owasp-llm-top10-pack.json"]
+  },
+  "attacks": [
+    { "plugin": "owasp/llm01-prompt-injection-zh-basic" },
+    { "plugin": "owasp/llm01-prompt-injection-en-basic" },
+    { "plugin": "owasp/llm02-sensitive-data-zh-secrets" },
+    { "plugin": "owasp/llm02-sensitive-data-en-secrets" }
+  ],
+  "judge": {
+    "plugin": "owasp/keyword-secrets"
+  },
+  "timeoutMs": 15000
+}

@@ -30,6 +30,14 @@ const configs = {
     banner: "#!/usr/bin/env node",
     external: [],
   },
+  web: {
+    entryPoints: ["packages/web/src/index.ts"],
+    outfile: "packages/web/dist/index.js",
+    typesInfile: "dist/packages/web/src/index.d.ts",
+    typesOutfile: "packages/web/dist/index.d.ts",
+    banner: "",
+    external: ["playwright", "playwright-core", "chromium-bidi", "chromium-bidi/*"],
+  },
 };
 
 const config = configs[target];

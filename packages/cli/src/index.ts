@@ -139,6 +139,30 @@ export async function runCli(
     return { exitCode: 0, output };
   }
 
+  if (group === "web" && command === "scan") {
+    const flags = parseFlags(rest);
+    const configPath = readRequiredFlag(flags, "config");
+    const reportFormat = readReportFormat(flags);
+    const outputPath = readStringFlag(flags, "output");
+
+    const { loadWebScanConfig, runWebScan } = await import("@nullbunny/web");
+    const config = await loadWebScanConfig(configPath);
+    const result = await runWebScan(config);
+    const output = formatScanRun(result as any);
+
+    if (outputPath) {
+      await writeReportFile(outputPath, renderReport(result as any, reportFormat));
+    }
+
+    if (result.summary.errors > 0 || result.provider.ok === false) {
+      console.error(output);
+      return { exitCode: 1, output };
+    }
+
+    console.log(output);
+    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
+  }
+
   const output = helpText();
   console.log(output);
   return { exitCode: 0, output };
@@ -251,6 +275,7 @@ function helpText(): string {
     "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",
     "  NB_WEB_USERNAME=xxx NB_WEB_PASSWORD=yyy node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json --headed true",
     "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",
+    "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json",
   ].join("\\n");
 }
 

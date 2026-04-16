@@ -40,8 +40,10 @@ NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 
 
 ### 🟡 开发中 (In Progress)
 - **Web AI 黑盒扫描器 (`web scan`)**
-  - [ ] 从 HAR 自动识别/推断聊天对话接口 (API Endpoint & Params)
-  - [ ] 提取 Payload 注入点并自动实施 OWASP 变种投毒测试
+  - [x] 从 HAR 自动识别候选的 OpenAI-compatible 请求并重放
+  - [x] 基于 attack pack 对候选对话接口执行注入请求并判定
+  - [ ] 更强的“端点识别/参数推断”（适配非 OpenAI-compatible 形态）
+  - [ ] 自动生成可复现的 curl/脚本（便于安全研究复现与写报告）
 - **分发与安装体验**
   - [ ] npm 全局包发布 (`npm install -g nullbunny`)
   - [ ] 提供跨平台的单文件安装脚本 (macOS/Linux/Windows)
@@ -151,4 +153,10 @@ node packages/cli/dist/index.js web record-har \
 
 ```bash
 node packages/cli/dist/index.js web analyze-har --har ./reports/web.har
+```
+
+使用 HAR 进行黑盒扫描（示例配置在 `examples/web-scan/scan.json`）：
+
+```bash
+node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json
 ```

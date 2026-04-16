@@ -96,6 +96,18 @@ importers:
 
   packages/web:
     dependencies:
+      '@nullbunny/attacks':
+        specifier: workspace:*
+        version: link:../attacks
+      '@nullbunny/judges':
+        specifier: workspace:*
+        version: link:../judges
+      '@nullbunny/mcp-bridge':
+        specifier: workspace:*
+        version: link:../mcp-bridge
+      '@nullbunny/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
       playwright:
         specifier: ^1.55.0
         version: 1.59.1
