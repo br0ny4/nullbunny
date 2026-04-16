@@ -67,6 +67,7 @@ export interface WebScanCaseResult {
   category: string;
   prompt: string;
   response: string;
+  reproCurl?: string;
   outcome: ScanOutcome;
   reason: string;
   latencyMs: number;
@@ -214,6 +215,7 @@ export async function runWebScan(config: WebScanConfig): Promise<WebScanRunResul
         category: attack.category,
         prompt: attack.prompt,
         response: "",
+        reproCurl: "",
         outcome: "error",
         reason: "No LLM-like request found in HAR",
         latencyMs: 0,
@@ -244,6 +246,7 @@ export async function runWebScan(config: WebScanConfig): Promise<WebScanRunResul
       category: attack.category,
       prompt: attack.prompt,
       response: generation.ok ? generation.text : "",
+      reproCurl: buildReproCurl(template, attack.prompt),
       outcome: judged.outcome,
       reason: judged.reason,
       latencyMs: generation.latencyMs,
@@ -598,6 +601,56 @@ function injectPromptIntoOpenAICompatibleBody(
   }
   (cloned as any).messages = messages;
   return cloned;
+}
+
+function buildReproCurl(template: LlmRequestTemplate, prompt: string): string {
+  const body = injectPromptIntoOpenAICompatibleBody(template.body, prompt);
+  const safeHeaders = sanitizeReproHeaders(template.headers);
+  const headerFlags = Object.entries(safeHeaders).flatMap(([key, value]) => [
+    "-H",
+    shellEscape(`${key}: ${value}`),
+  ]);
+
+  return [
+    "curl",
+    "-sS",
+    "-X",
+    shellEscape(template.method),
+    shellEscape(template.url),
+    ...headerFlags,
+    "--data",
+    shellEscape(JSON.stringify(body)),
+  ].join(" ");
+}
+
+function sanitizeReproHeaders(headers: Record<string, string>): Record<string, string> {
+  const blocked = [
+    "authorization",
+    "cookie",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "x-csrf-token",
+  ];
+
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = key.toLowerCase();
+    if (blocked.includes(lower) || lower.includes("token")) {
+      continue;
+    }
+    out[lower] = value;
+  }
+
+  if (!out["content-type"]) {
+    out["content-type"] = "application/json";
+  }
+
+  return out;
+}
+
+function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function findLastUserMessageIndex(messages: any[]): number {

@@ -43,7 +43,7 @@ NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 
   - [x] 从 HAR 自动识别候选的 OpenAI-compatible 请求并重放
   - [x] 基于 attack pack 对候选对话接口执行注入请求并判定
   - [ ] 更强的“端点识别/参数推断”（适配非 OpenAI-compatible 形态）
-  - [ ] 自动生成可复现的 curl/脚本（便于安全研究复现与写报告）
+  - [x] 自动生成可复现的 curl（默认脱敏 header）
 - **分发与安装体验**
   - [ ] npm 全局包发布 (`npm install -g nullbunny`)
   - [ ] 提供跨平台的单文件安装脚本 (macOS/Linux/Windows)

@@ -6,7 +6,7 @@ declare const process: {
 
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
 import { dirname } from "node:path";
@@ -66,6 +66,7 @@ export async function runCli(
   if (group === "scan" && command === "run") {
     const flags = parseFlags(rest);
     const configPath = readRequiredFlag(flags, "config");
+    const baselinePath = readStringFlag(flags, "baseline");
     const config = await loadScanConfig(configPath);
     const result = await runScan(config);
     const output = formatScanRun(result);
@@ -79,6 +80,13 @@ export async function runCli(
     if (result.summary.errors > 0 || result.provider.ok === false) {
       console.error(output);
       return { exitCode: 1, output };
+    }
+
+    const newFlagged = await countNewFlagged(result as any, baselinePath);
+    if (baselinePath) {
+      const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
+      console.log(`${output}\n${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${baselineLine}` };
     }
 
     console.log(output);
@@ -142,6 +150,7 @@ export async function runCli(
   if (group === "web" && command === "scan") {
     const flags = parseFlags(rest);
     const configPath = readRequiredFlag(flags, "config");
+    const baselinePath = readStringFlag(flags, "baseline");
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
 
@@ -157,6 +166,13 @@ export async function runCli(
     if (result.summary.errors > 0 || result.provider.ok === false) {
       console.error(output);
       return { exitCode: 1, output };
+    }
+
+    const newFlagged = await countNewFlagged(result as any, baselinePath);
+    if (baselinePath) {
+      const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
+      console.log(`${output}\n${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${baselineLine}` };
     }
 
     console.log(output);
@@ -271,12 +287,52 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
     "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",
     "  NB_WEB_USERNAME=xxx NB_WEB_PASSWORD=yyy node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json --headed true",
     "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",
     "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json",
+    "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --baseline ./reports/web-baseline.json",
   ].join("\\n");
+}
+
+async function countNewFlagged(
+  current: { cases?: Array<{ caseId: string; outcome: string }> },
+  baselinePath: string | undefined,
+): Promise<number> {
+  if (!baselinePath) {
+    return 0;
+  }
+
+  const baseline = await readBaselineReport(baselinePath);
+  if (!baseline) {
+    return 0;
+  }
+
+  const baselineFlagged = new Set(
+    baseline.cases.filter((item) => item.outcome === "flagged").map((item) => item.caseId),
+  );
+  const currentFlagged = (current.cases ?? [])
+    .filter((item) => item.outcome === "flagged")
+    .map((item) => item.caseId);
+
+  return currentFlagged.filter((id) => !baselineFlagged.has(id)).length;
+}
+
+async function readBaselineReport(
+  filePath: string,
+): Promise<{ cases: Array<{ caseId: string; outcome: string }> } | undefined> {
+  try {
+    const content = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(content) as any;
+    if (!parsed || !Array.isArray(parsed.cases)) {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
 }
 
 const isDirectExecution = process.argv[1]
