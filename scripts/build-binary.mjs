@@ -14,6 +14,13 @@ const configs = {
     typesInfile: "dist/packages/cli/src/index.d.ts",
     typesOutfile: "packages/cli/dist/index.d.ts",
     banner: "#!/usr/bin/env node",
+    external: [
+      "@nullbunny/web",
+      "playwright",
+      "playwright-core",
+      "chromium-bidi",
+      "chromium-bidi/*",
+    ],
   },
   action: {
     entryPoints: ["apps/action/src/index.ts"],
@@ -21,6 +28,7 @@ const configs = {
     typesInfile: "dist/apps/action/src/index.d.ts",
     typesOutfile: "apps/action/dist/index.d.ts",
     banner: "#!/usr/bin/env node",
+    external: [],
   },
 };
 
@@ -39,6 +47,7 @@ await build({
   platform: "node",
   target: "node20",
   sourcemap: true,
+  external: config.external ?? [],
   banner: {
     js: config.banner,
   },

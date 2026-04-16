@@ -16,7 +16,8 @@
       "@nullbunny/judges": ["packages/judges/src/index.ts"],
       "@nullbunny/mcp-bridge": ["packages/mcp-bridge/src/index.ts"],
       "@nullbunny/reporters": ["packages/reporters/src/index.ts"],
-      "@nullbunny/action-app": ["apps/action/src/index.ts"]
+      "@nullbunny/action-app": ["apps/action/src/index.ts"],
+      "@nullbunny/web": ["packages/web/src/index.ts"]
     },
     "declaration": true,
     "sourceMap": true,

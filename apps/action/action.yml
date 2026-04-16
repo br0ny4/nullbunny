@@ -4,6 +4,9 @@ inputs:
   config:
     description: Path to scan.json
     required: true
+  baseline_path:
+    description: Optional path to a previous JSON report used as baseline
+    required: false
   archive_dir:
     description: Directory to write archived reports
     required: false
@@ -26,6 +29,8 @@ outputs:
     description: Exit code produced by the scan (0 ok, 1 error, 2 flagged)
   summary:
     description: Summary line of the scan result
+  new_flagged:
+    description: Number of newly flagged cases compared to baseline
 runs:
   using: node20
   main: dist/index.js

@@ -6,7 +6,7 @@ declare const process: {
 
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
 import { dirname } from "node:path";
@@ -148,6 +148,7 @@ async function runCommandLine(): Promise<number> {
 
 async function runGitHubAction(): Promise<number> {
   const configPath = readRequiredInput("config");
+  const baselinePath = readOptionalInput("baseline_path");
   const archiveDir = readOptionalInput("archive_dir");
   const reportFormat = readOptionalInput("report_format");
   const outputPath = readOptionalInput("output");
@@ -158,6 +159,9 @@ async function runGitHubAction(): Promise<number> {
     archiveDir,
     reportFormat: reportFormat === "markdown" ? "markdown" : "json",
   });
+
+  const baseline = await readBaselineReport(baselinePath);
+  const newFlaggedIds = deriveNewFlaggedCaseIds(actionResult.scan, baseline);
 
   if (outputPath) {
     await writeTextFile(
@@ -171,6 +175,7 @@ async function runGitHubAction(): Promise<number> {
   await writeGitHubOutput("archive_path", actionResult.archivePath);
   await writeGitHubOutput("exit_code", String(actionResult.exitCode));
   await writeGitHubOutput("summary", summaryLine);
+  await writeGitHubOutput("new_flagged", String(newFlaggedIds.length));
 
   await writeGitHubStepSummary(
     [
@@ -181,6 +186,8 @@ async function runGitHubAction(): Promise<number> {
       `- provider: ${actionResult.scan.provider.providerType} (${actionResult.scan.provider.providerId})`,
       `- provider-status: ${actionResult.scan.provider.ok ? "ready" : "failed"}`,
       `- summary: ${summaryLine}`,
+      baselinePath ? `- baseline: ${baselinePath}` : `- baseline: (none)`,
+      `- new-flagged: ${String(newFlaggedIds.length)}`,
       `- archive: ${actionResult.archivePath}`,
       "",
       "```",
@@ -195,7 +202,7 @@ async function runGitHubAction(): Promise<number> {
     return 1;
   }
 
-  const shouldFailOnFlagged = actionResult.scan.summary.flagged > 0 && failOnFlagged;
+  const shouldFailOnFlagged = (baseline ? newFlaggedIds.length > 0 : actionResult.scan.summary.flagged > 0) && failOnFlagged;
   if (shouldFailOnFlagged) {
     console.error(`${actionResult.consoleOutput}\narchive: ${actionResult.archivePath}`);
     return 2;
@@ -233,4 +240,40 @@ async function writeGitHubStepSummary(content: string): Promise<void> {
   }
 
   await appendFile(summaryPath, content, "utf8");
+}
+
+async function readBaselineReport(
+  baselinePath: string | undefined,
+): Promise<ScanRunResult | undefined> {
+  if (!baselinePath) {
+    return undefined;
+  }
+
+  try {
+    const content = await readFile(baselinePath, "utf8");
+    const parsed = JSON.parse(content) as ScanRunResult;
+    if (!parsed || !Array.isArray(parsed.cases)) {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function deriveNewFlaggedCaseIds(
+  current: ScanRunResult,
+  baseline: ScanRunResult | undefined,
+): string[] {
+  if (!baseline) {
+    return [];
+  }
+
+  const baselineFlagged = new Set(
+    baseline.cases.filter((item) => item.outcome === "flagged").map((item) => item.caseId),
+  );
+  return current.cases
+    .filter((item) => item.outcome === "flagged")
+    .map((item) => item.caseId)
+    .filter((id) => !baselineFlagged.has(id));
 }

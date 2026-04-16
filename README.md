@@ -12,6 +12,7 @@ NullBunny 是一个 Node.js/TypeScript 的 LLM 红队自动化扫描框架，面
 - Reports：输出 JSON/Markdown 报告
 - Extensions：通过 manifest 加载外部攻击/判定插件包（方便社区贡献）
 - GitHub Action：在 PR/Push 时运行扫描并归档报告
+- Web（实验）：无头浏览器登录并录制 HAR，便于“被动扫描/抓包导入”作为后续渗透扫描种子
 
 ## 快速开始（本地）
 
@@ -34,6 +35,7 @@ node packages/cli/dist/index.js providers test --provider openai-compatible --ba
 ```bash
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/basic-openai-compatible/scan.json
+node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.json
 ```
 
 写出报告：
@@ -62,10 +64,13 @@ jobs:
       - uses: br0ny4/nullbunny/apps/action@main
         with:
           config: ./examples/basic-ollama/scan.json
+          baseline_path: ./reports/baseline.json
           archive_dir: ./reports/archive
           report_format: json
           fail_on_flagged: "true"
 ```
+
+当提供 `baseline_path` 且文件存在时，默认只会在“新增 flagged”时失败（更适配 CI 逐步落地）。
 
 ## 扩展（manifest）
 
@@ -80,3 +85,24 @@ jobs:
 ```
 
 示例外部 manifest：见 [community-pack.json](examples/extensions/community-pack.json)。
+
+内置 OWASP LLM Top 10 starter pack：见 [owasp-llm-top10-pack.json](examples/extensions/owasp-llm-top10-pack.json) 与示例扫描配置 [scan.json](examples/owasp-ollama/scan.json)。
+
+## Web 被动扫描（实验）
+
+无头浏览器登录并录制 HAR（账号密码建议走环境变量/GitHub Secrets）：
+
+```bash
+NB_WEB_USERNAME=your_user NB_WEB_PASSWORD=your_pass \
+node packages/cli/dist/index.js web record-har \
+  --url https://example.com/login \
+  --steps ./examples/web/login.steps.json \
+  --har ./reports/web.har \
+  --headed true
+```
+
+分析 HAR，找出候选的 LLM 接口与请求概况：
+
+```bash
+node packages/cli/dist/index.js web analyze-har --har ./reports/web.har
+```

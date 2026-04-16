@@ -1,0 +1,9 @@
+[
+  { "action": "waitForSelector", "selector": "input[type=email], input[name=email], input[name=username]" },
+  { "action": "type", "selector": "input[type=email], input[name=email], input[name=username]", "text": "${NB_WEB_USERNAME}", "clear": true },
+  { "action": "waitForSelector", "selector": "input[type=password], input[name=password]" },
+  { "action": "type", "selector": "input[type=password], input[name=password]", "text": "${NB_WEB_PASSWORD}", "clear": true },
+  { "action": "press", "selector": "input[type=password], input[name=password]", "key": "Enter" },
+  { "action": "waitForNavigation" },
+  { "action": "wait", "ms": 2000 }
+]

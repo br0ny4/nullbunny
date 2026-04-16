@@ -106,6 +106,39 @@ export async function runCli(
     return { exitCode: actionResult.exitCode, output: archiveMessage };
   }
 
+  if (group === "web" && command === "record-har") {
+    const flags = parseFlags(rest);
+    const url = readRequiredFlag(flags, "url");
+    const harPath = readRequiredFlag(flags, "har");
+    const stepsPath = readStringFlag(flags, "steps");
+    const headed = readStringFlag(flags, "headed") === "true";
+    const finalWaitValue = readStringFlag(flags, "final-wait-ms");
+    const finalWaitMs = finalWaitValue ? Number.parseInt(finalWaitValue, 10) : undefined;
+
+    const { recordHar } = await import("@nullbunny/web");
+    await recordHar({
+      url,
+      harPath,
+      stepsPath,
+      headed,
+      finalWaitMs,
+    });
+
+    const output = `har: ${harPath}`;
+    console.log(output);
+    return { exitCode: 0, output };
+  }
+
+  if (group === "web" && command === "analyze-har") {
+    const flags = parseFlags(rest);
+    const harPath = readRequiredFlag(flags, "har");
+    const { analyzeHar } = await import("@nullbunny/web");
+    const result = await analyzeHar(harPath);
+    const output = JSON.stringify(result, null, 2);
+    console.log(output);
+    return { exitCode: 0, output };
+  }
+
   const output = helpText();
   console.log(output);
   return { exitCode: 0, output };
@@ -215,6 +248,9 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
+    "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",
+    "  NB_WEB_USERNAME=xxx NB_WEB_PASSWORD=yyy node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json --headed true",
+    "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",
   ].join("\\n");
 }
 

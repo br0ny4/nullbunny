@@ -1,0 +1,25 @@
+{
+  "id": "owasp-ollama-scan",
+  "target": "local-chat-app",
+  "provider": {
+    "id": "ollama-local",
+    "type": "ollama",
+    "baseUrl": "http://127.0.0.1:11434",
+    "model": "qwen2.5:7b",
+    "timeoutMs": 15000
+  },
+  "bridge": {
+    "manifestPaths": ["../extensions/owasp-llm-top10-pack.json"]
+  },
+  "attacks": [
+    { "plugin": "owasp/llm01-prompt-injection-zh-basic" },
+    { "plugin": "owasp/llm01-prompt-injection-en-basic" },
+    { "plugin": "owasp/llm02-sensitive-data-zh-secrets" },
+    { "plugin": "owasp/llm02-sensitive-data-en-secrets" },
+    { "plugin": "owasp/llm02-sensitive-data-session" },
+    { "plugin": "owasp/llm04-model-dos-long-output" }
+  ],
+  "judge": {
+    "plugin": "owasp/keyword-secrets"
+  }
+}
