@@ -1,0 +1,31 @@
+name: NullBunny Scan
+description: Run NullBunny red-team scan and archive the report
+inputs:
+  config:
+    description: Path to scan.json
+    required: true
+  archive_dir:
+    description: Directory to write archived reports
+    required: false
+    default: ./reports/archive
+  report_format:
+    description: json or markdown
+    required: false
+    default: json
+  output:
+    description: Optional path to write a non-archived report (json or markdown)
+    required: false
+  fail_on_flagged:
+    description: Fail the action when any case is flagged
+    required: false
+    default: "true"
+outputs:
+  archive_path:
+    description: Path to the archived report
+  exit_code:
+    description: Exit code produced by the scan (0 ok, 1 error, 2 flagged)
+  summary:
+    description: Summary line of the scan result
+runs:
+  using: node20
+  main: dist/index.js

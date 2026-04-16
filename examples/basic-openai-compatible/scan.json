@@ -1,0 +1,25 @@
+{
+  "id": "local-openai-compatible-scan",
+  "target": "local-agent-gateway",
+  "provider": {
+    "id": "openai-compatible-local",
+    "type": "openai-compatible",
+    "baseUrl": "http://127.0.0.1:8000/v1",
+    "model": "local-model",
+    "timeoutMs": 15000
+  },
+  "bridge": {
+    "manifestPaths": ["../extensions/community-pack.json"]
+  },
+  "attacks": [
+    {
+      "plugin": "community/agent-leak"
+    },
+    {
+      "plugin": "community/session-dump"
+    }
+  ],
+  "judge": {
+    "plugin": "community/sensitive-keywords"
+  }
+}

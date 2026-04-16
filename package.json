@@ -1,0 +1,25 @@
+{
+  "name": "nullbunny",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js AI red teaming framework for LLMs, agents, and RAG apps.",
+  "packageManager": "pnpm@10.30.2",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "action": "pnpm build && node apps/action/dist/index.js",
+    "build": "pnpm -r build",
+    "cli": "pnpm build && node packages/cli/dist/index.js",
+    "dev": "pnpm cli",
+    "lint": "pnpm -r lint",
+    "test": "pnpm build && node --test tests/*.test.mjs",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.0",
+    "esbuild": "^0.25.11",
+    "typescript": "^6.0.2"
+  }
+}

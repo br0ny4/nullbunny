@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "types": ["node"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@nullbunny/core": ["packages/core/src/index.ts"],
+      "@nullbunny/providers": ["packages/providers/src/index.ts"],
+      "@nullbunny/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
+      "@nullbunny/attacks": ["packages/attacks/src/index.ts"],
+      "@nullbunny/judges": ["packages/judges/src/index.ts"],
+      "@nullbunny/mcp-bridge": ["packages/mcp-bridge/src/index.ts"],
+      "@nullbunny/reporters": ["packages/reporters/src/index.ts"],
+      "@nullbunny/action-app": ["apps/action/src/index.ts"]
+    },
+    "declaration": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "outDir": "dist"
+  }
+}

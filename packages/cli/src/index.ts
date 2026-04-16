@@ -1,0 +1,234 @@
+declare const process: {
+  argv: string[];
+  env: Record<string, string | undefined>;
+  exitCode?: number;
+};
+
+// Temporary until workspace dependencies are installed in this environment.
+// @ts-ignore
+import { mkdir, writeFile } from "node:fs/promises";
+// Temporary until workspace dependencies are installed in this environment.
+// @ts-ignore
+import { dirname } from "node:path";
+// Temporary source import while the workspace package build pipeline is still minimal.
+// @ts-ignore
+import { runAction } from "@nullbunny/action-app";
+// Temporary source import while the workspace package build pipeline is still minimal.
+// @ts-ignore
+import {
+  formatScanRun,
+  loadScanConfig,
+  runScan,
+} from "@nullbunny/core";
+// Temporary source import while the workspace package build pipeline is still minimal.
+// @ts-ignore
+import { renderReport, type ReportFormat } from "@nullbunny/reporters";
+// Temporary source import while the workspace package build pipeline is still minimal.
+// @ts-ignore
+import {
+  createProvider,
+  formatHealthCheck,
+  type ProviderConfig,
+} from "@nullbunny/providers";
+
+export interface CliResult {
+  exitCode: number;
+  output: string;
+}
+
+export function createCli() {
+  return {
+    name: "nullbunny",
+    run: runCli,
+  };
+}
+
+export async function runCli(
+  argv: string[] = process.argv.slice(2),
+): Promise<CliResult> {
+  const [group, command, ...rest] = argv;
+
+  if (group === "providers" && command === "test") {
+    const flags = parseFlags(rest);
+    const config = buildProviderConfig(flags);
+    const status = await createProvider(config).healthCheck();
+    const output = formatHealthCheck(status);
+
+    if (status.ok) {
+      console.log(output);
+      return { exitCode: 0, output };
+    }
+
+    console.error(output);
+    return { exitCode: 1, output };
+  }
+
+  if (group === "scan" && command === "run") {
+    const flags = parseFlags(rest);
+    const configPath = readRequiredFlag(flags, "config");
+    const config = await loadScanConfig(configPath);
+    const result = await runScan(config);
+    const output = formatScanRun(result);
+    const reportFormat = readReportFormat(flags);
+    const outputPath = readStringFlag(flags, "output");
+
+    if (outputPath) {
+      await writeReportFile(outputPath, renderReport(result, reportFormat));
+    }
+
+    if (result.summary.errors > 0 || result.provider.ok === false) {
+      console.error(output);
+      return { exitCode: 1, output };
+    }
+
+    console.log(output);
+    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
+  }
+
+  if (group === "action" && command === "run") {
+    const flags = parseFlags(rest);
+    const configPath = readRequiredFlag(flags, "config");
+    const archiveDir = readStringFlag(flags, "archive-dir");
+    const reportFormat = readReportFormat(flags);
+    const actionResult = await runAction({
+      configPath,
+      archiveDir,
+      reportFormat,
+    });
+
+    const archiveMessage = `${actionResult.consoleOutput}\narchive: ${actionResult.archivePath}`;
+    if (actionResult.exitCode > 0) {
+      console.error(archiveMessage);
+      return { exitCode: actionResult.exitCode, output: archiveMessage };
+    }
+
+    console.log(archiveMessage);
+    return { exitCode: actionResult.exitCode, output: archiveMessage };
+  }
+
+  const output = helpText();
+  console.log(output);
+  return { exitCode: 0, output };
+}
+
+function buildProviderConfig(
+  flags: Record<string, string | boolean>,
+): ProviderConfig {
+  const provider = readRequiredFlag(flags, "provider");
+  const model = readStringFlag(flags, "model");
+  const timeoutValue = readStringFlag(flags, "timeout-ms");
+  const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : undefined;
+
+  if (provider === "ollama") {
+    return {
+      id: readStringFlag(flags, "id") ?? "ollama-local",
+      type: "ollama",
+      baseUrl:
+        readStringFlag(flags, "base-url") ?? "http://127.0.0.1:11434",
+      model,
+      timeoutMs,
+    };
+  }
+
+  if (provider === "openai-compatible") {
+    return {
+      id: readStringFlag(flags, "id") ?? "openai-compatible-local",
+      type: "openai-compatible",
+      baseUrl:
+        readStringFlag(flags, "base-url") ?? "http://127.0.0.1:8000/v1",
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env.OPENAI_API_KEY,
+      timeoutMs,
+    };
+  }
+
+  throw new Error(`Unsupported provider type: ${provider}`);
+}
+
+function parseFlags(args: string[]): Record<string, string | boolean> {
+  const flags: Record<string, string | boolean> = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (!current.startsWith("--")) {
+      continue;
+    }
+
+    const key = current.slice(2);
+    const next = args[index + 1];
+    if (!next || next.startsWith("--")) {
+      flags[key] = true;
+      continue;
+    }
+
+    flags[key] = next;
+    index += 1;
+  }
+
+  return flags;
+}
+
+function readRequiredFlag(
+  flags: Record<string, string | boolean>,
+  key: string,
+): string {
+  const value = readStringFlag(flags, key);
+  if (!value) {
+    throw new Error(`Missing required flag --${key}`);
+  }
+
+  return value;
+}
+
+function readStringFlag(
+  flags: Record<string, string | boolean>,
+  key: string,
+): string | undefined {
+  const value = flags[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function readReportFormat(
+  flags: Record<string, string | boolean>,
+): ReportFormat {
+  const value = readStringFlag(flags, "report-format");
+  if (value === "markdown") {
+    return "markdown";
+  }
+
+  return "json";
+}
+
+async function writeReportFile(filePath: string, content: string): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, content, "utf8");
+}
+
+function helpText(): string {
+  return [
+    "NullBunny CLI",
+    "",
+    "Commands:",
+    "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
+    "  node packages/cli/dist/index.js providers test --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model local-model",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
+    "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
+  ].join("\\n");
+}
+
+const isDirectExecution = process.argv[1]
+  ? new URL(import.meta.url).pathname === process.argv[1]
+  : false;
+
+if (isDirectExecution) {
+  runCli()
+    .then((result) => {
+      process.exitCode = result.exitCode;
+    })
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : "Unknown CLI error");
+      process.exitCode = 1;
+    });
+}

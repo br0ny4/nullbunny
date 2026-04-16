@@ -1,0 +1,30 @@
+{
+  "name": "@nullbunny/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "nullbunny": "dist/index.js"
+  },
+  "dependencies": {
+    "@nullbunny/action-app": "workspace:*",
+    "@nullbunny/core": "workspace:*",
+    "@nullbunny/providers": "workspace:*",
+    "@nullbunny/reporters": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ../../scripts/build-binary.mjs cli",
+    "dev": "node dist/index.js",
+    "lint": "node -e \"process.exit(0)\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
