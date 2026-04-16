@@ -14,6 +14,52 @@ NullBunny 是一个 Node.js/TypeScript 的 LLM 红队自动化扫描框架，面
 - GitHub Action：在 PR/Push 时运行扫描并归档报告
 - Web（实验）：无头浏览器登录并录制 HAR，便于“被动扫描/抓包导入”作为后续渗透扫描种子
 
+## 功能与路线图 (TODO)
+
+NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 应用安全扫描与渗透测试工具。以下是我们的功能完成情况与演进计划：
+
+### 🟢 已完成 (Done)
+- **核心扫描引擎**
+  - [x] 基于 JSON 的扫描配置驱动 (`scan.json`)
+  - [x] 支持多种判定规则 (Keyword / Allow-all)
+  - [x] 多种格式的报告输出 (JSON / Markdown)
+- **多模型支持**
+  - [x] 支持本地 Ollama 接口连通性测试与生成
+  - [x] 支持 OpenAI 兼容接口 (OpenAI-compatible)
+- **扩展与生态**
+  - [x] 插件化架构 (Plugin SDK)
+  - [x] 通过 MCP Bridge 动态加载外部攻击/判定 Manifest
+  - [x] 提供 OWASP LLM Top 10 Starter Pack 基础包
+- **CI / CD 工程化**
+  - [x] GitHub Action 封装 (`apps/action`)
+  - [x] Baseline 增量扫描策略 (只对“新增风险”阻断流水线)
+  - [x] 项目自身的完整自动化测试与类型检查
+- **Web 渗透辅助 (实验性)**
+  - [x] 基于无头浏览器 (Playwright) 的自动化登录与会话保持
+  - [x] 自动录制 HAR 流量包以供离线分析
+
+### 🟡 开发中 (In Progress)
+- **Web AI 黑盒扫描器 (`web scan`)**
+  - [ ] 从 HAR 自动识别/推断聊天对话接口 (API Endpoint & Params)
+  - [ ] 提取 Payload 注入点并自动实施 OWASP 变种投毒测试
+- **分发与安装体验**
+  - [ ] npm 全局包发布 (`npm install -g nullbunny`)
+  - [ ] 提供跨平台的单文件安装脚本 (macOS/Linux/Windows)
+
+### ⚪ 计划中 (Planned)
+- **更多商业大模型原生支持**
+  - [ ] Anthropic (Claude) API 原生支持
+  - [ ] Gemini API 原生支持
+  - [ ] Azure OpenAI 原生支持
+  - [ ] DeepSeek API 原生支持
+- **高级漏洞检测与报告**
+  - [ ] 针对 RAG 系统的向量/上下文污染 (Context Poisoning) 测试用例
+  - [ ] Agentic AI 专属攻击包 (Tool Abuse / 越权执行)
+  - [ ] 生成 GitHub Code Scanning 原生支持的 SARIF 格式报告
+- **进阶 Web 渗透**
+  - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
+  - [ ] 扩展至传统高危 Web 漏洞探测 (XSS/SQLi) 的轻量级扫描辅助
+
 ## 快速开始（本地）
 
 ```bash
