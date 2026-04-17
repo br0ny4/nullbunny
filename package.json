@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Node.js AI red teaming framework for LLMs, agents, and RAG apps.",
+  "description": "Comprehensive red team automated penetration testing framework covering LLM security, web vulnerabilities, and CI security gates.",
   "packageManager": "pnpm@10.30.2",
   "engines": {
     "node": ">=20.0.0"

@@ -3,59 +3,71 @@
 [![CI](https://github.com/br0ny4/nullbunny/actions/workflows/ci.yml/badge.svg)](https://github.com/br0ny4/nullbunny/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-NullBunny 是一个 Node.js/TypeScript 的 LLM 红队自动化扫描框架，面向 LLM、Agent、RAG 场景，可用于本地自测或 CI Gate。
+NullBunny 是一个 Node.js/TypeScript 的综合性红队自动化渗透测试框架，覆盖 LLM 安全、Web 漏洞、CI 安全门禁等场景，可用于本地自测或 CI Gate。
+
+> 🤖 本项目由 [Trae](https://www.trae.ai/) + AI 全程自动化编写，从架构设计、代码实现到测试验证均由 AI 驱动完成。
+
+## ✨ 亮点
+
+NullBunny 在传统 Web 渗透测试的基础上，**率先深度覆盖 AI 应用安全**：
+
+- **LLM 红队扫描** — 内置 OWASP LLM Top 10 攻击包，支持 Prompt Injection、敏感数据泄露、越权等自动化检测
+- **RAG 上下文污染** — 独家 RAG Context Poisoning 攻击包（18 用例 / 5 大类），覆盖文档注入、检索操纵、嵌入混淆、来源伪造
+- **AI 黑盒渗透** — 从 HAR 流量自动识别 LLM 接口，注入攻击 payload 并判定响应，无需源码
+- **多模型 Provider** — Ollama / OpenAI-compatible / Anthropic (Claude) / 硅基流动 等开箱即用
 
 ## 功能
 
-- Providers：支持本地 Ollama、OpenAI-compatible、Anthropic (Claude) 端点
-- Scans：按配置文件批量执行攻击用例并进行判定（judge）
-- Reports：输出 JSON / Markdown / SARIF 报告（SARIF 可直接导入 GitHub Code Scanning）
-- Extensions：通过 manifest 加载外部攻击/判定插件包（方便社区贡献）
-- Attack Packs：内置 OWASP LLM Top 10、RAG 上下文污染攻击包
-- GitHub Action：在 PR/Push 时运行扫描并归档报告
-- Web（实验）：无头浏览器登录并录制 HAR，便于"被动扫描/抓包导入"作为后续渗透扫描种子
-- Web Vuln Scan（实验）：传统 Web 漏洞探测（XXE/XSS/SQLi/SSRF/Path Traversal），基于 HAR 端点自动注入 payload
+- **Scans**：按配置文件批量执行攻击用例并进行判定（judge）
+- **Web Vuln Scan**：传统 Web 漏洞探测（XXE / XSS / SQLi / SSRF / Path Traversal），基于 HAR 端点自动注入 payload
+- **Web 被动扫描**：无头浏览器登录并录制 HAR，AI 黑盒扫描
+- **Providers**：支持 Ollama、OpenAI-compatible、Anthropic (Claude) 端点
+- **Reports**：输出 JSON / Markdown / SARIF 报告（SARIF 可直接导入 GitHub Code Scanning）
+- **Extensions**：通过 manifest 加载外部攻击/判定插件包（方便社区贡献）
+- **Attack Packs**：内置 OWASP LLM Top 10、RAG 上下文污染攻击包
+- **GitHub Action**：在 PR/Push 时运行扫描并归档报告，支持 Baseline 增量策略
 
 ## 功能与路线图 (TODO)
 
-NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 应用安全扫描与渗透测试工具。以下是我们的功能完成情况与演进计划：
+NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红队自动化渗透测试框架。以下是我们的功能完成情况与演进计划：
 
 ### 🟢 已完成 (Done)
 - **核心扫描引擎**
   - [x] 基于 JSON 的扫描配置驱动 (`scan.json`)
   - [x] 支持多种判定规则 (Keyword / Allow-all)
   - [x] 多种格式的报告输出 (JSON / Markdown / SARIF)
-- **多模型支持**
+  - [x] 扫描配置支持 `${ENV_VAR}` 环境变量插值（安全传递 API Key）
+- **LLM / AI 安全（🌟 亮点）**
+  - [x] OWASP LLM Top 10 攻击包（10 类攻击，中英双语）
+  - [x] RAG 上下文污染攻击包（18 用例 / 5 大类：文档注入、检索操纵、上下文溢出、嵌入混淆、来源伪造）
+  - [x] AI 黑盒扫描：从 HAR 自动识别 LLM 接口并注入攻击
+  - [x] 自定义 API 形态检测（prompt / query / message 字段）
+  - [x] 自动生成可复现的 curl（默认脱敏 header）
+- **多模型 Provider**
   - [x] 支持本地 Ollama 接口连通性测试与生成
-  - [x] 支持 OpenAI 兼容接口 (OpenAI-compatible)
+  - [x] 支持 OpenAI 兼容接口（含硅基流动等国内平台）
   - [x] 支持 Anthropic (Claude) Messages API 原生接口
-- **扩展与生态**
-  - [x] 插件化架构 (Plugin SDK)
-  - [x] 通过 MCP Bridge 动态加载外部攻击/判定 Manifest
-  - [x] 提供 OWASP LLM Top 10 Starter Pack 基础包
-  - [x] 提供 RAG 上下文污染 (Context Poisoning) 攻击包
-- **CI / CD 工程化**
-  - [x] GitHub Action 封装 (`apps/action`)
-  - [x] Baseline 增量扫描策略 (只对"新增风险"阻断流水线)
-  - [x] SARIF 报告可直接导入 GitHub Code Scanning
-  - [x] 项目自身的完整自动化测试与类型检查
-- **Web 渗透辅助 (实验性)**
+- **Web 渗透测试**
   - [x] 基于无头浏览器 (Playwright) 的自动化登录与会话保持
   - [x] 自动录制 HAR 流量包以供离线分析
-- **传统 Web 漏洞探测 (实验性)**
   - [x] XXE (XML External Entity) 检测
   - [x] XSS (Cross-Site Scripting) 反射型检测
   - [x] SQLi (SQL Injection) 错误/时间/布尔盲注检测
   - [x] SSRF (Server-Side Request Forgery) 检测
   - [x] Path Traversal 路径穿越检测
   - [x] 自动对 GET 端点尝试 POST + 多种 Content-Type 注入
+- **扩展与生态**
+  - [x] 插件化架构 (Plugin SDK)
+  - [x] 通过 MCP Bridge 动态加载外部攻击/判定 Manifest
+- **CI / CD 工程化**
+  - [x] GitHub Action 封装 (`apps/action`)
+  - [x] Baseline 增量扫描策略 (只对"新增风险"阻断流水线)
+  - [x] SARIF 报告可直接导入 GitHub Code Scanning
+  - [x] 项目自身的完整自动化测试与类型检查
 
 ### 🟡 开发中 (In Progress)
-- **Web AI 黑盒扫描器 (`web scan`)**
-  - [x] 从 HAR 自动识别候选的 OpenAI-compatible 请求并重放
-  - [x] 基于 attack pack 对候选对话接口执行注入请求并判定
+- **Web AI 黑盒扫描器增强**
   - [ ] 更强的"端点识别/参数推断"（适配非 OpenAI-compatible 形态）
-  - [x] 自动生成可复现的 curl（默认脱敏 header）
 - **分发与安装体验**
   - [ ] npm 全局包发布 (`npm install -g nullbunny`)
   - [ ] 提供跨平台的单文件安装脚本 (macOS/Linux/Windows)
@@ -65,12 +77,20 @@ NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 
   - [ ] Gemini API 原生支持
   - [ ] Azure OpenAI 原生支持
   - [ ] DeepSeek API 原生支持
-- **高级漏洞检测与报告**
+- **高级漏洞检测**
   - [ ] Agentic AI 专属攻击包 (Tool Abuse / 越权执行)
+  - [ ] 命令注入 (Command Injection) 检测
+  - [ ] 文件上传漏洞检测
+  - [ ] 反序列化漏洞检测
 - **进阶 Web 渗透**
   - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
   - [ ] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
   - [ ] Web 漏洞扫描支持爬虫模式（自动发现端点）
+  - [ ] 认证绕过 / 权限提升自动化检测
+- **基础设施安全**
+  - [ ] 子域名枚举与资产发现
+  - [ ] 端口扫描与服务识别
+  - [ ] 常见中间件默认配置检测
 
 ## 快速开始（本地）
 
@@ -89,7 +109,7 @@ node packages/cli/dist/index.js providers test --provider openai-compatible --ba
 node packages/cli/dist/index.js providers test --provider anthropic --model claude-sonnet-4-20250514
 ```
 
-运行扫描：
+运行 LLM 安全扫描：
 
 ```bash
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json
@@ -97,6 +117,14 @@ node packages/cli/dist/index.js scan run --config ./examples/basic-openai-compat
 node packages/cli/dist/index.js scan run --config ./examples/basic-anthropic/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/rag-ollama/scan.json
+```
+
+运行 Web 漏洞扫描：
+
+```bash
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format markdown --output ./reports/vuln-scan.md
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json
 ```
 
 写出报告：
@@ -197,7 +225,7 @@ node packages/cli/dist/index.js web record-har \
 node packages/cli/dist/index.js web analyze-har --har ./reports/web.har
 ```
 
-使用 HAR 进行黑盒扫描（示例配置在 `examples/web-scan/scan.json`）：
+使用 HAR 进行 AI 黑盒扫描（示例配置在 `examples/web-scan/scan.json`）：
 
 ```bash
 node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json
