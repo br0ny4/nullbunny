@@ -1,0 +1,88 @@
+name: Web Vulnerability Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scan'
+        required: true
+      vulns:
+        description: 'Vuln types (comma-separated: xxe,xss,sqli,ssrf,path-traversal)'
+        required: false
+        default: 'xxe,xss,sqli,ssrf,path-traversal'
+      report_format:
+        description: 'Report format (json / markdown / sarif)'
+        required: false
+        default: 'sarif'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Install Playwright
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Record HAR
+        run: |
+          mkdir -p ./reports
+          node packages/cli/dist/index.js web record-har \
+            --url "${{ github.event.inputs.target_url }}" \
+            --har ./reports/target.har \
+            --final-wait-ms 3000
+
+      - name: Generate scan config
+        run: |
+          node scripts/generate-vuln-scan-config.mjs \
+            "${{ github.event.inputs.target_url }}" \
+            "${{ github.event.inputs.vulns }}" \
+            "./reports/vuln-scan.json"
+
+      - name: Run Web Vuln Scan
+        run: |
+          FORMAT="${{ github.event.inputs.report_format || 'sarif' }}"
+          if [ "$FORMAT" = "markdown" ]; then
+            EXT="md"
+          elif [ "$FORMAT" = "sarif" ]; then
+            EXT="sarif.json"
+          else
+            EXT="json"
+          fi
+          node packages/cli/dist/index.js web vuln-scan \
+            --config ./reports/vuln-scan.json \
+            --report-format "$FORMAT" \
+            --output "./reports/vuln-results.$EXT"
+        continue-on-error: true
+
+      - name: Upload SARIF to Code Scanning
+        if: always() && hashFiles('./reports/vuln-results.sarif.json') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ./reports/vuln-results.sarif.json
+        continue-on-error: true
+
+      - name: Archive Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nullbunny-web-vuln-report
+          path: ./reports/
+          retention-days: 30

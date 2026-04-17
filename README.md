@@ -55,6 +55,7 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [x] SQLi (SQL Injection) 错误/时间/布尔盲注检测
   - [x] SSRF (Server-Side Request Forgery) 检测
   - [x] Path Traversal 路径穿越检测
+  - [x] CMDi (Command Injection) 命令注入检测
   - [x] 自动对 GET 端点尝试 POST + 多种 Content-Type 注入
 - **扩展与生态**
   - [x] 插件化架构 (Plugin SDK)
@@ -79,7 +80,7 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [ ] DeepSeek API 原生支持
 - **高级漏洞检测**
   - [ ] Agentic AI 专属攻击包 (Tool Abuse / 越权执行)
-  - [ ] 命令注入 (Command Injection) 检测
+  - [x] 命令注入 (Command Injection) 检测
   - [ ] 文件上传漏洞检测
   - [ ] 反序列化漏洞检测
 - **进阶 Web 渗透**
@@ -241,4 +242,4 @@ node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json
 ```
 
-支持的漏洞类型：XXE、XSS、SQLi、SSRF、Path Traversal。扫描器会自动对 GET 端点尝试 POST + 多种 Content-Type 注入。
+支持的漏洞类型：XXE、XSS、SQLi、SSRF、Path Traversal、CMDi。扫描器会自动对 GET 端点尝试 POST + 多种 Content-Type 注入。

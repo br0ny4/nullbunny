@@ -1,0 +1,90 @@
+name: NullBunny Scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/**'
+      - 'packages/**'
+      - 'apps/**'
+      - '.github/workflows/scan.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      config:
+        description: 'Path to scan config JSON'
+        required: false
+        default: './examples/basic-ollama/scan.json'
+      provider:
+        description: 'Provider type (ollama / openai-compatible / anthropic)'
+        required: false
+        default: 'ollama'
+      model:
+        description: 'Model name'
+        required: false
+        default: 'qwen2.5:7b'
+      report_format:
+        description: 'Report format (json / markdown / sarif)'
+        required: false
+        default: 'sarif'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Run NullBunny Scan
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        run: |
+          CONFIG="${{ github.event.inputs.config || './examples/basic-ollama/scan.json' }}"
+          FORMAT="${{ github.event.inputs.report_format || 'sarif' }}"
+          if [ "$FORMAT" = "markdown" ]; then
+            EXT="md"
+          elif [ "$FORMAT" = "sarif" ]; then
+            EXT="sarif.json"
+          else
+            EXT="json"
+          fi
+          mkdir -p ./reports
+          node packages/cli/dist/index.js scan run \
+            --config "$CONFIG" \
+            --report-format "$FORMAT" \
+            --output "./reports/scan-results.$EXT"
+        continue-on-error: true
+
+      - name: Upload SARIF to Code Scanning
+        if: always() && hashFiles('./reports/scan-results.sarif.json') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ./reports/scan-results.sarif.json
+        continue-on-error: true
+
+      - name: Archive Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nullbunny-report
+          path: ./reports/
+          retention-days: 30

