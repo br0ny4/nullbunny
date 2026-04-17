@@ -34,6 +34,7 @@ test("runCli returns help output without arguments", async () => {
     assert.equal(result.exitCode, 0);
     assert.match(result.output, /NullBunny CLI/);
     assert.match(result.output, /action run/);
+    assert.match(result.output, /recon scan/);
     assert.equal(outputLines.length, 1);
   } finally {
     console.log = originalLog;

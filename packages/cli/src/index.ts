@@ -30,6 +30,7 @@ import {
   formatHealthCheck,
   type ProviderConfig,
 } from "@nullbunny/providers";
+import { runReconScan } from "@nullbunny/recon";
 
 export interface CliResult {
   exitCode: number;
@@ -112,6 +113,49 @@ export async function runCli(
 
     console.log(archiveMessage);
     return { exitCode: actionResult.exitCode, output: archiveMessage };
+  }
+
+  if (group === "recon" && command === "scan") {
+    const flags = parseFlags(rest);
+    const hostsValue = readStringFlag(flags, "hosts") ?? "127.0.0.1";
+    const portsValue = readRequiredFlag(flags, "ports");
+    const timeoutValue = readStringFlag(flags, "timeout-ms");
+    const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : 2000;
+    const grabBanner = readStringFlag(flags, "banner") === "true";
+    const subdomainsDomain = readStringFlag(flags, "subdomains");
+    const wordlistValue = readStringFlag(flags, "wordlist");
+    const outputPath = readStringFlag(flags, "output");
+
+    const hosts = hostsValue
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    let subdomains: { domain: string; wordlist: string[] } | undefined;
+    if (subdomainsDomain) {
+      const wordlist = wordlistValue
+        ? wordlistValue.split(",").map((w) => w.trim()).filter(Boolean)
+        : ["www", "api", "dev", "test", "staging", "admin", "mail", "blog"];
+      subdomains = { domain: subdomainsDomain, wordlist };
+    }
+
+    const result = await runReconScan({
+      scanId: `recon-${Date.now()}`,
+      target: hosts.join(","),
+      hosts,
+      ports: portsValue,
+      timeoutMs,
+      grabBanner,
+      subdomains,
+    });
+    const output = JSON.stringify(result, null, 2);
+
+    if (outputPath) {
+      await writeReportFile(outputPath, output);
+    }
+
+    console.log(output);
+    return { exitCode: result.summary.open > 0 ? 2 : 0, output };
   }
 
   if (group === "web" && command === "record-har") {
@@ -428,6 +472,7 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
+    "  node packages/cli/dist/index.js recon scan --hosts example.com --ports 80,443 --subdomains example.com --wordlist www,api,admin --banner true --output ./reports/recon.json",
     "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",
     "  NB_WEB_USERNAME=xxx NB_WEB_PASSWORD=yyy node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json --headed true",
     "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",

@@ -91,8 +91,9 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [x] Web 漏洞扫描支持爬虫模式（自动发现端点）
   - [ ] 认证绕过 / 权限提升自动化检测
 - **基础设施安全**
-  - [ ] 子域名枚举与资产发现
-  - [ ] 端口扫描与服务识别
+  - [x] TCP 端口扫描与服务连通性探测
+  - [x] 服务识别与 Banner 抓取
+  - [x] 子域名枚举与字典解析
   - [ ] 常见中间件默认配置检测
 
 ## 快速开始（本地）
@@ -122,6 +123,18 @@ node packages/cli/dist/index.js scan run --config ./examples/basic-anthropic/sca
 node packages/cli/dist/index.js scan run --config ./examples/basic-deepseek/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/rag-ollama/scan.json
+```
+
+运行资产发现（子域名枚举、端口扫描与 Banner 抓取）：
+
+```bash
+node packages/cli/dist/index.js recon scan \
+  --hosts 127.0.0.1 \
+  --ports 22,80,443 \
+  --subdomains example.com \
+  --wordlist www,api,admin \
+  --banner true \
+  --output ./reports/recon.json
 ```
 
 运行 Web 漏洞扫描：

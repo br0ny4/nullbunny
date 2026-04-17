@@ -19,6 +19,7 @@
     "@nullbunny/action-app": "workspace:*",
     "@nullbunny/core": "workspace:*",
     "@nullbunny/providers": "workspace:*",
+    "@nullbunny/recon": "workspace:*",
     "@nullbunny/reporters": "workspace:*",
     "@nullbunny/web": "workspace:*"
   },
