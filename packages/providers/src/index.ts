@@ -1,4 +1,4 @@
-export type ProviderType = "ollama" | "openai-compatible" | "anthropic";
+export type ProviderType = "ollama" | "openai-compatible" | "anthropic" | "deepseek";
 
 export interface ProviderConfig {
   id: string;
@@ -55,7 +55,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
           ? "/api/tags"
           : normalized.type === "anthropic"
             ? "/v1/models"
-            : "/models";
+            : normalized.type === "deepseek"
+              ? "/v1/models"
+              : "/models";
       const headers: Record<string, string> = {};
       if (normalized.type === "openai-compatible" && normalized.apiKey) {
         headers.authorization = `Bearer ${normalized.apiKey}`;
@@ -65,6 +67,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
           headers["x-api-key"] = normalized.apiKey;
         }
         headers["anthropic-version"] = "2023-06-01";
+      }
+      if (normalized.type === "deepseek" && normalized.apiKey) {
+        headers.authorization = `Bearer ${normalized.apiKey}`;
       }
 
       try {
@@ -78,7 +83,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
             ? readOllamaModels(body)
             : normalized.type === "anthropic"
               ? readAnthropicModels(body)
-              : readOpenAICompatibleModels(body);
+              : normalized.type === "deepseek"
+                ? readDeepSeekModels(body)
+                : readOpenAICompatibleModels(body);
 
         if (
           normalized.model &&
@@ -129,7 +136,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
             ? await generateWithOllama(normalized, prompt)
             : normalized.type === "anthropic"
               ? await generateWithAnthropic(normalized, prompt)
-              : await generateWithOpenAICompatible(normalized, prompt);
+              : normalized.type === "deepseek"
+                ? await generateWithDeepSeek(normalized, prompt)
+                : await generateWithOpenAICompatible(normalized, prompt);
 
         return {
           ok: true,
@@ -394,4 +403,54 @@ function readAnthropicText(body: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function readDeepSeekModels(body: unknown): string[] {
+  if (!isRecord(body) || !Array.isArray(body.data)) {
+    return [];
+  }
+
+  return body.data
+    .map((entry) =>
+      isRecord(entry) && typeof entry.id === "string" ? entry.id : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+}
+
+async function generateWithDeepSeek(
+  config: ProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (config.apiKey) {
+    headers.authorization = `Bearer ${config.apiKey}`;
+  }
+
+  const body = await request(
+    `${config.baseUrl}/v1/chat/completions`,
+    config.timeoutMs ?? 10_000,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        max_tokens: 4096,
+      }),
+    },
+  );
+
+  const text = readOpenAICompatibleText(body);
+  if (text) {
+    return text;
+  }
+
+  throw new Error("Invalid DeepSeek generation response");
 }

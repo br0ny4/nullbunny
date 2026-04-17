@@ -252,6 +252,18 @@ function buildProviderConfig(
     };
   }
 
+  if (provider === "deepseek") {
+    return {
+      id: readStringFlag(flags, "id") ?? "deepseek",
+      type: "deepseek",
+      baseUrl:
+        readStringFlag(flags, "base-url") ?? "https://api.deepseek.com",
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env.DEEPSEEK_API_KEY,
+      timeoutMs,
+    };
+  }
+
   throw new Error(`Unsupported provider type: ${provider}`);
 }
 
@@ -326,6 +338,7 @@ function helpText(): string {
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
     "  node packages/cli/dist/index.js providers test --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model local-model",
     "  node packages/cli/dist/index.js providers test --provider anthropic --model claude-sonnet-4-20250514",
+    "  node packages/cli/dist/index.js providers test --provider deepseek --model deepseek-chat",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",

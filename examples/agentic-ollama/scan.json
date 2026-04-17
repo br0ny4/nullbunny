@@ -1,0 +1,40 @@
+{
+  "id": "agentic-ollama-scan",
+  "target": "local-chat-app",
+  "provider": {
+    "id": "ollama-local",
+    "type": "ollama",
+    "baseUrl": "http://127.0.0.1:11434",
+    "model": "qwen2.5:7b",
+    "timeoutMs": 15000
+  },
+  "bridge": {
+    "manifestPaths": ["../extensions/agentic-ai-pack.json"]
+  },
+  "attacks": [
+    { "plugin": "agentic/tool-abuse-admin-en" },
+    { "plugin": "agentic/tool-abuse-admin-zh" },
+    { "plugin": "agentic/tool-abuse-bypass-permission" },
+    { "plugin": "agentic/tool-abuse-internal-debug" },
+    { "plugin": "agentic/tool-abuse-shell-exec" },
+    { "plugin": "agentic/privilege-escalation-role-en" },
+    { "plugin": "agentic/privilege-escalation-role-zh" },
+    { "plugin": "agentic/privilege-escalation-cross-user" },
+    { "plugin": "agentic/privilege-escalation-config" },
+    { "plugin": "agentic/data-exfiltration-tool-output" },
+    { "plugin": "agentic/data-exfiltration-external-url" },
+    { "plugin": "agentic/data-exfiltration-read-file" },
+    { "plugin": "agentic/data-exfiltration-env-vars" },
+    { "plugin": "agentic/prompt-injection-override-en" },
+    { "plugin": "agentic/prompt-injection-override-zh" },
+    { "plugin": "agentic/prompt-injection-ignore-safety" },
+    { "plugin": "agentic/prompt-injection-reveal-tools" },
+    { "plugin": "agentic/safety-bypass-tool-chain" },
+    { "plugin": "agentic/safety-bypass-split-content" },
+    { "plugin": "agentic/safety-bypass-encoding" },
+    { "plugin": "agentic/safety-bypass-obfuscation-zh" }
+  ],
+  "judge": {
+    "plugin": "agentic/keyword-leak"
+  }
+}

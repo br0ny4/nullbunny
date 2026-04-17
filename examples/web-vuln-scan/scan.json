@@ -8,7 +8,8 @@
     { "type": "sqli" },
     { "type": "ssrf" },
     { "type": "path-traversal" },
-    { "type": "cmdi" }
+    { "type": "cmdi" },
+    { "type": "file-upload" }
   ],
   "timeoutMs": 10000
 }

