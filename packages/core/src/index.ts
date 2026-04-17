@@ -59,7 +59,8 @@ export interface ScanRunResult {
 
 export async function loadScanConfig(filePath: string): Promise<ScanConfig> {
   const content = await readFile(filePath, "utf8");
-  const parsed = JSON.parse(content) as unknown;
+  const interpolated = interpolateEnvVars(content);
+  const parsed = JSON.parse(interpolated) as unknown;
   if (!isScanConfig(parsed)) {
     throw new Error("Invalid scan config");
   }
@@ -264,4 +265,11 @@ function isProviderConfig(value: unknown): value is ProviderConfig {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null;
+}
+
+function interpolateEnvVars(text: string): string {
+  return text.replace(/\$\{([A-Za-z0-9_]+)\}/g, (full, key: string) => {
+    const resolved = process.env[key];
+    return resolved === undefined ? full : resolved;
+  });
 }
