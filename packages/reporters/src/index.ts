@@ -147,6 +147,13 @@ function renderReconMarkdown(result: ReconScanResult): string {
     }
   }
 
+  if (result.findings && result.findings.length > 0) {
+    lines.push(``, `## Middleware Findings`);
+    for (const f of result.findings) {
+      lines.push(`- [${f.severity.toUpperCase()}] ${f.service} on ${f.host}:${f.port} - ${f.finding}`);
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -156,7 +163,19 @@ function renderReconSarif(result: ReconScanResult): string {
       id: "open-port",
       shortDescription: { text: "Open TCP Port" },
     },
+    {
+      id: "middleware-finding",
+      shortDescription: { text: "Middleware Configuration Issue" },
+    },
   ];
+
+  const severityToLevel: Record<string, string> = {
+    critical: "error",
+    high: "error",
+    medium: "warning",
+    low: "note",
+    info: "note",
+  };
 
   const sarifResults = result.results
     .filter((r) => r.open)
@@ -174,6 +193,25 @@ function renderReconSarif(result: ReconScanResult): string {
         },
       ],
     }));
+
+  if (result.findings) {
+    for (const f of result.findings) {
+      sarifResults.push({
+        ruleId: "middleware-finding",
+        level: severityToLevel[f.severity] ?? "note",
+        message: {
+          text: `[${f.service}] ${f.finding}`,
+        },
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri: `tcp://${f.host}:${f.port}` },
+            },
+          },
+        ],
+      });
+    }
+  }
 
   const sarif = {
     $schema:

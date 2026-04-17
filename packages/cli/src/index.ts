@@ -122,6 +122,7 @@ export async function runCli(
     const timeoutValue = readStringFlag(flags, "timeout-ms");
     const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : 2000;
     const grabBanner = readStringFlag(flags, "banner") === "true";
+    const detectMiddleware = readStringFlag(flags, "detect-middleware") === "true";
     const subdomainsDomain = readStringFlag(flags, "subdomains");
     const wordlistValue = readStringFlag(flags, "wordlist");
     const outputPath = readStringFlag(flags, "output");
@@ -147,6 +148,7 @@ export async function runCli(
       ports: portsValue,
       timeoutMs,
       grabBanner,
+      detectMiddleware,
       subdomains,
     });
 

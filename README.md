@@ -94,7 +94,7 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [x] TCP 端口扫描与服务连通性探测
   - [x] 服务识别与 Banner 抓取
   - [x] 子域名枚举与字典解析
-  - [ ] 常见中间件默认配置检测
+  - [x] 常见中间件默认配置检测（Tomcat, Spring Boot, Redis 等）
 
 ## 快速开始（本地）
 
@@ -125,15 +125,16 @@ node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.j
 node packages/cli/dist/index.js scan run --config ./examples/rag-ollama/scan.json
 ```
 
-运行资产发现（子域名枚举、端口扫描与 Banner 抓取）：
+运行资产发现（子域名枚举、端口扫描与中间件探测）：
 
 ```bash
 node packages/cli/dist/index.js recon scan \
   --hosts 127.0.0.1 \
-  --ports 22,80,443 \
+  --ports 22,80,443,6379,8080 \
   --subdomains example.com \
   --wordlist www,api,admin \
   --banner true \
+  --detect-middleware true \
   --output ./reports/recon.json
 ```
 

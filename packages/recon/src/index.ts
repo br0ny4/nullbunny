@@ -17,6 +17,14 @@ export interface TcpPortScanResult extends HostPort {
   banner?: string;
 }
 
+export interface MiddlewareFinding {
+  host: string;
+  port: number;
+  service: string;
+  finding: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+}
+
 export interface ReconScanConfig {
   scanId: string;
   target: string;
@@ -24,6 +32,7 @@ export interface ReconScanConfig {
   ports: string;
   timeoutMs?: number;
   grabBanner?: boolean;
+  detectMiddleware?: boolean;
   subdomains?: {
     domain: string;
     wordlist: string[];
@@ -36,8 +45,10 @@ export interface ReconScanResult {
   summary: {
     targets: number;
     open: number;
+    findings?: number;
   };
   results: TcpPortScanResult[];
+  findings?: MiddlewareFinding[];
 }
 
 export interface HostResolution {
@@ -87,11 +98,17 @@ export async function runReconScan(config: ReconScanConfig): Promise<ReconScanRe
   });
   const open = results.filter((item) => item.open).length;
 
+  let findings: MiddlewareFinding[] | undefined;
+  if (config.detectMiddleware) {
+    findings = await detectMiddlewareConfigurations(results, config.timeoutMs);
+  }
+
   return {
     scanId: config.scanId,
     target: config.target,
-    summary: { targets: results.length, open },
+    summary: { targets: results.length, open, findings: findings?.length ?? 0 },
     results,
+    findings,
   };
 }
 
@@ -127,6 +144,107 @@ export function parsePortSpec(spec: string): number[] {
   }
 
   return Array.from(ports).sort((a, b) => a - b);
+}
+
+export async function detectMiddlewareConfigurations(
+  results: TcpPortScanResult[],
+  timeoutMs = 3000,
+): Promise<MiddlewareFinding[]> {
+  const findings: MiddlewareFinding[] = [];
+  const openResults = results.filter((r) => r.open);
+
+  const checkHttp = async (
+    host: string,
+    port: number,
+    path: string,
+    service: string,
+    expectedStatus: number,
+    expectedContent?: string,
+    severity: "critical" | "high" | "medium" | "low" | "info" = "high",
+  ) => {
+    const protocol = port === 443 || port === 8443 ? "https" : "http";
+    const url = `${protocol}://${host}:${port}${path}`;
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), timeoutMs);
+      const res = await fetch(url, { signal: ac.signal, redirect: "manual" });
+      clearTimeout(timer);
+
+      if (res.status === expectedStatus) {
+        if (!expectedContent) {
+          findings.push({ host, port, service, severity, finding: `Accessible ${service} at ${url}` });
+          return;
+        }
+        const text = await res.text();
+        if (text.includes(expectedContent)) {
+          findings.push({ host, port, service, severity, finding: `Accessible ${service} at ${url}` });
+        }
+      }
+    } catch {
+      // ignore fetch errors
+    }
+  };
+
+  const checkRedis = async (host: string, port: number) => {
+    return new Promise<void>((resolve) => {
+      const socket = connect({ host, port });
+      let data = "";
+      const timer = setTimeout(() => {
+        socket.destroy();
+        resolve();
+      }, timeoutMs);
+
+      socket.on("connect", () => {
+        socket.write("INFO\\r\\n");
+      });
+
+      socket.on("data", (chunk: Buffer) => {
+        data += chunk.toString("utf-8");
+        if (data.includes("redis_version")) {
+          findings.push({
+            host,
+            port,
+            service: "Redis",
+            severity: "critical",
+            finding: `Unauthenticated Redis exposed at ${host}:${port}`,
+          });
+          clearTimeout(timer);
+          socket.destroy();
+          resolve();
+        }
+      });
+
+      socket.on("error", () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve();
+      });
+
+      socket.on("end", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  };
+
+  const checks: Promise<void>[] = [];
+
+  for (const r of openResults) {
+    if (r.port === 6379) {
+      checks.push(checkRedis(r.host, r.port));
+    }
+
+    if ([80, 443, 8080, 8443, 8000, 9000].includes(r.port)) {
+      checks.push(checkHttp(r.host, r.port, "/actuator/env", "Spring Boot Actuator", 200, "java.version"));
+      checks.push(checkHttp(r.host, r.port, "/manager/html", "Tomcat Manager", 401, undefined, "medium"));
+      checks.push(checkHttp(r.host, r.port, "/manager/html", "Tomcat Manager Default", 200, "Tomcat Web Application Manager", "critical"));
+      checks.push(checkHttp(r.host, r.port, "/server-status", "Apache Server Status", 200, "Apache Server Status"));
+      checks.push(checkHttp(r.host, r.port, "/.git/config", "Git Repository Disclosure", 200, "[core]", "high"));
+    }
+  }
+
+  await Promise.all(checks);
+  return findings;
 }
 
 export async function scanTcpPorts(
