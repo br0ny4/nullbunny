@@ -179,11 +179,94 @@ export async function runCli(
     return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
   }
 
+  if (group === "web" && command === "crawl") {
+    const flags = parseFlags(rest);
+    const url = readRequiredFlag(flags, "url");
+    const maxDepthValue = readStringFlag(flags, "max-depth");
+    const maxDepth = maxDepthValue ? Number.parseInt(maxDepthValue, 10) : 2;
+    const maxPagesValue = readStringFlag(flags, "max-pages");
+    const maxPages = maxPagesValue ? Number.parseInt(maxPagesValue, 10) : 20;
+    const sameOriginValue = readStringFlag(flags, "same-origin");
+    const sameOriginOnly = sameOriginValue !== "false";
+    const timeoutValue = readStringFlag(flags, "timeout-ms");
+    const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : undefined;
+    const outputPath = readStringFlag(flags, "output");
+
+    const { crawlWebsite } = await import("@nullbunny/web");
+    const result = await crawlWebsite({
+      id: `crawl-${Date.now()}`,
+      target: new URL(url).host,
+      startUrl: url,
+      maxDepth,
+      maxPages,
+      sameOriginOnly,
+      timeoutMs,
+    });
+
+    const output = JSON.stringify(result, null, 2);
+
+    if (outputPath) {
+      await writeReportFile(outputPath, output);
+    }
+
+    console.log(output);
+    return { exitCode: 0, output };
+  }
+
   if (group === "web" && command === "vuln-scan") {
     const flags = parseFlags(rest);
-    const configPath = readRequiredFlag(flags, "config");
+    const crawlUrl = readStringFlag(flags, "crawl-url");
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
+
+    if (crawlUrl) {
+      const vulnsValue = readStringFlag(flags, "vulns");
+      const vulnTypes = vulnsValue ? vulnsValue.split(",").map((v) => v.trim()) : ["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi", "file-upload"];
+      const maxDepthValue = readStringFlag(flags, "max-depth");
+      const maxDepth = maxDepthValue ? Number.parseInt(maxDepthValue, 10) : 2;
+      const maxPagesValue = readStringFlag(flags, "max-pages");
+      const maxPages = maxPagesValue ? Number.parseInt(maxPagesValue, 10) : 20;
+      const timeoutValue = readStringFlag(flags, "timeout-ms");
+      const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : undefined;
+
+      const { crawlWebsite, crawlToHarEndpoints, runWebVulnScanFromEndpoints } = await import("@nullbunny/web");
+      const crawlResult = await crawlWebsite({
+        id: `crawl-${Date.now()}`,
+        target: new URL(crawlUrl).host,
+        startUrl: crawlUrl,
+        maxDepth,
+        maxPages,
+        sameOriginOnly: true,
+        timeoutMs,
+      });
+
+      const harEndpoints = crawlToHarEndpoints(crawlResult.endpoints);
+      const vulns = vulnTypes.map((type) => ({ type } as import("@nullbunny/web").WebVulnScanEntry));
+      const result = await runWebVulnScanFromEndpoints(
+        crawlResult.id,
+        crawlResult.target,
+        harEndpoints,
+        vulns,
+        timeoutMs,
+      );
+
+      const output = JSON.stringify(result, null, 2);
+
+      if (outputPath) {
+        const { renderWebVulnScanReport } = await import("@nullbunny/reporters");
+        await writeReportFile(outputPath, renderWebVulnScanReport(result, reportFormat));
+      }
+
+      if (result.summary.critical > 0 || result.summary.high > 0) {
+        console.error(output);
+        return { exitCode: 2, output };
+      }
+
+      console.log(output);
+      return { exitCode: result.summary.total > 0 ? 1 : 0, output };
+    }
+
+    const configPath = readRequiredFlag(flags, "config");
 
     const { loadWebVulnScanConfig, runWebVulnScan } = await import("@nullbunny/web");
     const config = await loadWebVulnScanConfig(configPath);
@@ -350,8 +433,10 @@ function helpText(): string {
     "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",
     "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json",
     "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --baseline ./reports/web-baseline.json",
+    "  node packages/cli/dist/index.js web crawl --url https://example.com --max-depth 2 --max-pages 20 --output ./reports/crawl.json",
     "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json",
     "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json",
+    "  node packages/cli/dist/index.js web vuln-scan --crawl-url https://example.com --vulns xxe,xss,sqli --output ./reports/vuln-scan.json",
   ].join("\\n");
 }
 

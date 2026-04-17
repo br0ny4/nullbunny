@@ -87,6 +87,36 @@ export interface WebScanRunResult {
   cases: WebScanCaseResult[];
 }
 
+export interface WebCrawlConfig {
+  id: string;
+  target: string;
+  startUrl: string;
+  maxDepth: number;
+  maxPages: number;
+  sameOriginOnly: boolean;
+  timeoutMs?: number;
+}
+
+export interface WebCrawlResult {
+  id: string;
+  target: string;
+  pagesCrawled: number;
+  endpoints: CrawledEndpoint[];
+}
+
+export interface CrawledEndpoint {
+  url: string;
+  method: string;
+  links: string[];
+  forms: CrawledForm[];
+}
+
+export interface CrawledForm {
+  action: string;
+  method: string;
+  fields: string[];
+}
+
 export interface WebVulnScanConfig {
   id: string;
   target: string;
@@ -106,6 +136,7 @@ export type WebVulnScanEntry = {
   | { type: "path-traversal" }
   | { type: "cmdi" }
   | { type: "file-upload" }
+  | { type: "deserialization" }
 );
 
 export interface WebVulnFinding {
@@ -157,6 +188,139 @@ export async function recordHar(options: RecordHarOptions): Promise<void> {
 
   await context.close();
   await browser.close();
+}
+
+export async function crawlWebsite(config: WebCrawlConfig): Promise<WebCrawlResult> {
+  const { chromium: crawlChromium } = await import("playwright");
+  const browser = await crawlChromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  const visited = new Set<string>();
+  const queue: Array<{ url: string; depth: number }> = [{ url: config.startUrl, depth: 0 }];
+  const endpoints: CrawledEndpoint[] = [];
+  const startOrigin = new URL(config.startUrl).origin;
+  const timeoutMs = config.timeoutMs ?? 30_000;
+
+  while (queue.length > 0 && endpoints.length < config.maxPages) {
+    const item = queue.shift()!;
+    if (item.depth > config.maxDepth) {
+      continue;
+    }
+
+    const normalizedUrl = normalizeCrawlUrl(item.url);
+    if (visited.has(normalizedUrl)) {
+      continue;
+    }
+
+    visited.add(normalizedUrl);
+
+    try {
+      const response = await page.goto(item.url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+      if (!response) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    const links = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll("a[href]"))
+        .map((el) => (el as HTMLAnchorElement).href)
+        .filter((href) => href.startsWith("http"));
+    });
+
+    const forms = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll("form")).map((form) => ({
+        action: form.action,
+        method: (form.method || "GET").toUpperCase(),
+        fields: Array.from(form.querySelectorAll("input, select, textarea"))
+          .map((el) => (el as HTMLInputElement).name)
+          .filter((name) => name.length > 0),
+      }));
+    });
+
+    endpoints.push({
+      url: item.url,
+      method: "GET",
+      links,
+      forms,
+    });
+
+    for (const link of links) {
+      if (config.sameOriginOnly) {
+        try {
+          const linkOrigin = new URL(link).origin;
+          if (linkOrigin !== startOrigin) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      const normalizedLink = normalizeCrawlUrl(link);
+      if (!visited.has(normalizedLink) && item.depth + 1 <= config.maxDepth) {
+        queue.push({ url: link, depth: item.depth + 1 });
+      }
+    }
+  }
+
+  await browser.close();
+
+  return {
+    id: config.id,
+    target: config.target,
+    pagesCrawled: endpoints.length,
+    endpoints,
+  };
+}
+
+export function crawlToHarEndpoints(crawledEndpoints: CrawledEndpoint[]): HarEndpoint[] {
+  const harEndpoints: HarEndpoint[] = [];
+  const seen = new Set<string>();
+
+  for (const endpoint of crawledEndpoints) {
+    const getKey = `GET ${endpoint.url}`;
+    if (!seen.has(getKey)) {
+      seen.add(getKey);
+      harEndpoints.push({
+        method: "GET",
+        url: endpoint.url,
+        headers: [],
+      });
+    }
+
+    for (const form of endpoint.forms) {
+      const formMethod = form.method === "GET" ? "GET" : "POST";
+      const formKey = `${formMethod} ${form.action}`;
+      if (!seen.has(formKey)) {
+        seen.add(formKey);
+        const postDataFields = form.fields.map((f) => `${encodeURIComponent(f)}=test`).join("&");
+        harEndpoints.push({
+          method: formMethod,
+          url: form.action,
+          headers: [],
+          postData: {
+            text: postDataFields,
+            mimeType: "application/x-www-form-urlencoded",
+          },
+        });
+      }
+    }
+  }
+
+  return harEndpoints;
+}
+
+function normalizeCrawlUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 export async function analyzeHar(harPath: string): Promise<AnalyzeHarResult> {
@@ -378,6 +542,63 @@ export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVuln
   };
 }
 
+export async function runWebVulnScanFromEndpoints(
+  scanId: string,
+  target: string,
+  endpoints: HarEndpoint[],
+  vulns: WebVulnScanEntry[],
+  timeoutMs?: number,
+): Promise<WebVulnScanResult> {
+  const enabledVulns = vulns.filter((v) => v.enabled !== false);
+  const findings: WebVulnFinding[] = [];
+  const effectiveTimeout = timeoutMs ?? 10_000;
+
+  for (const endpoint of endpoints) {
+    const baseline = await sendBaselineRequest(endpoint, effectiveTimeout);
+
+    for (const vuln of enabledVulns) {
+      const payloads = getPayloadsForVulnType(vuln.type);
+
+      for (const payload of payloads) {
+        const injectedRequests = injectPayload(endpoint, payload, vuln.type);
+
+        for (const injected of injectedRequests) {
+          const result = await sendVulnProbe(injected, effectiveTimeout);
+          const detection = detectVulnerability(vuln.type, payload, result, baseline);
+
+          if (detection.detected) {
+            findings.push({
+              id: randomUUID(),
+              vulnType: vuln.type,
+              severity: detection.severity,
+              url: injected.url,
+              method: injected.method,
+              payload: payload.value,
+              evidence: detection.evidence,
+              reproCurl: buildVulnReproCurl(injected),
+              confirmed: detection.confirmed,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    scanId,
+    target,
+    summary: {
+      total: findings.length,
+      critical: findings.filter((f) => f.severity === "critical").length,
+      high: findings.filter((f) => f.severity === "high").length,
+      medium: findings.filter((f) => f.severity === "medium").length,
+      low: findings.filter((f) => f.severity === "low").length,
+      info: findings.filter((f) => f.severity === "info").length,
+    },
+    findings,
+  };
+}
+
 type VulnPayload = {
   value: string;
   injectionPoint: "query" | "body" | "header" | "xml-body";
@@ -510,6 +731,13 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "webshell.asp", injectionPoint: "body", fileName: "test.asp", fileContent: "<% Response.Write(\"VULN_UPLOAD_TEST\") %>" },
       { value: "htaccess", injectionPoint: "body", fileName: ".htaccess", fileContent: "AddType application/x-httpd-php .jpg" },
       { value: "svg-xss", injectionPoint: "body", fileName: "test.svg", fileContent: "<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert('XSS')\"></svg>" },
+    ],
+    deserialization: [
+      { value: 'rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhw/////HcIAAAAAAAAACB4', injectionPoint: "body" },
+      { value: 'O:8:"stdClass":0:{}', injectionPoint: "body" },
+      { value: 'O:8:"stdClass":1:{s:3:"cmd";s:12:"cat /etc/passwd";}', injectionPoint: "body" },
+      { value: '{"__class__":"java.lang.Runtime","method":"exec","args":["cat /etc/passwd"]}', injectionPoint: "body" },
+      { value: '<java><object class="java.lang.ProcessBuilder"><array class="java.lang.String" length="2"><void index="0"><string>cat</string></void><void index="1"><string>/etc/passwd</string></void></array><void method="start"/></object></java>', injectionPoint: "xml-body" },
     ],
   };
 
@@ -800,6 +1028,9 @@ function detectVulnerability(vulnType: string, payload: VulnPayload, response: V
   if (vulnType === "file-upload") {
     return detectFileUpload(payload, response, baseline);
   }
+  if (vulnType === "deserialization") {
+    return detectDeserialization(payload, response, baseline);
+  }
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
 
@@ -1076,6 +1307,77 @@ function detectFileUpload(payload: VulnPayload, response: VulnProbeResponse, bas
   return { detected: false, severity: "info", evidence: "", confirmed: false };
 }
 
+function detectDeserialization(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const passwdPatterns = [/root:x:0:0/, /bin:x:\d+:\d+/, /daemon:x:\d+:\d+/];
+  for (const pattern of passwdPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `/etc/passwd content detected in response: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  const javaErrorPatterns = [/java\.lang/, /ClassNotFoundException/, /InvocationTargetException/];
+  for (const pattern of javaErrorPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "high",
+        evidence: `Java deserialization error exposed: ${match[0]}`,
+        confirmed: false,
+      };
+    }
+  }
+
+  const phpErrorPatterns = [/__sleep/, /__wakeup/, /unserialize/];
+  for (const pattern of phpErrorPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "high",
+        evidence: `PHP deserialization error exposed: ${match[0]}`,
+        confirmed: false,
+      };
+    }
+  }
+
+  const pythonErrorPatterns = [/pickle/, /UnpicklingError/];
+  for (const pattern of pythonErrorPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "high",
+        evidence: `Python deserialization error exposed: ${match[0]}`,
+        confirmed: false,
+      };
+    }
+  }
+
+  if (response.status === 500) {
+    const deserializationKeywords = [/deserializ/i, /unmarshal/i, /readObject/i, /fromstring/i];
+    for (const pattern of deserializationKeywords) {
+      const match = pattern.exec(response.body);
+      if (match) {
+        return {
+          detected: true,
+          severity: "medium",
+          evidence: `500 error with deserialization-related message: ${match[0]}`,
+          confirmed: false,
+        };
+      }
+    }
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
 function buildVulnReproCurl(request: VulnProbeRequest): string {
   const safeHeaders = sanitizeReproHeaders(request.headers);
   const headerFlags = Object.entries(safeHeaders).flatMap(([key, value]) => [
@@ -1115,7 +1417,7 @@ function isWebVulnScanConfig(value: unknown): value is WebVulnScanConfig {
     return false;
   }
 
-  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi", "file-upload"]);
+  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal", "cmdi", "file-upload", "deserialization"]);
   const vulns = (value as any).vulns;
 
   return (

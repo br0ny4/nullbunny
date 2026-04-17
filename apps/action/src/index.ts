@@ -126,7 +126,7 @@ function readReportFormat(
 }
 
 const isDirectExecution = process.argv[1]
-  ? new URL(import.meta.url).pathname === process.argv[1]
+  ? new URL(import.meta.url).pathname.endsWith("action/dist/index.js")
   : false;
 
 if (isDirectExecution) {

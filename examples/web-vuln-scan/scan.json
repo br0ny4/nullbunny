@@ -9,7 +9,8 @@
     { "type": "ssrf" },
     { "type": "path-traversal" },
     { "type": "cmdi" },
-    { "type": "file-upload" }
+    { "type": "file-upload" },
+    { "type": "deserialization" }
   ],
   "timeoutMs": 10000
 }

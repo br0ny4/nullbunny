@@ -60,7 +60,9 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [x] Path Traversal 路径穿越检测
   - [x] CMDi (Command Injection) 命令注入检测
   - [x] 文件上传漏洞检测
+  - [x] 反序列化漏洞检测
   - [x] 自动对 GET 端点尝试 POST + 多种 Content-Type 注入
+  - [x] Web 爬虫模式（自动发现端点，无需 HAR）
 - **扩展与生态**
   - [x] 插件化架构 (Plugin SDK)
   - [x] 通过 MCP Bridge 动态加载外部攻击/判定 Manifest
@@ -82,11 +84,11 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [ ] Gemini API 原生支持
   - [ ] Azure OpenAI 原生支持
 - **高级漏洞检测**
-  - [ ] 反序列化漏洞检测
+  - [x] 反序列化漏洞检测
 - **进阶 Web 渗透**
   - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
   - [ ] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
-  - [ ] Web 漏洞扫描支持爬虫模式（自动发现端点）
+  - [x] Web 漏洞扫描支持爬虫模式（自动发现端点）
   - [ ] 认证绕过 / 权限提升自动化检测
 - **基础设施安全**
   - [ ] 子域名枚举与资产发现
@@ -247,3 +249,26 @@ node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/
 ```
 
 支持的漏洞类型：XXE、XSS、SQLi、SSRF、Path Traversal、CMDi、文件上传。扫描器会自动对 GET 端点尝试 POST + 多种 Content-Type 注入。
+
+### Web 爬虫模式（实验）
+
+自动爬取目标网站，发现端点（链接和表单），无需手动录制 HAR：
+
+```bash
+node packages/cli/dist/index.js web crawl --url https://example.com --max-depth 2 --max-pages 20 --output ./reports/crawl.json
+```
+
+爬虫参数说明：
+- `--url`：起始 URL（必填）
+- `--max-depth`：最大爬取深度，默认 2
+- `--max-pages`：最大爬取页面数，默认 20
+- `--same-origin`：是否仅爬取同源链接，默认 true（设为 false 可跨域）
+- `--timeout-ms`：页面加载超时时间
+- `--output`：输出文件路径
+
+一键爬取 + 漏洞扫描（无需 HAR 文件）：
+
+```bash
+node packages/cli/dist/index.js web vuln-scan --crawl-url https://example.com --vulns xxe,xss,sqli --output ./reports/vuln-scan.json
+node packages/cli/dist/index.js web vuln-scan --crawl-url https://example.com --vulns xxe,xss,sqli,ssrf,path-traversal,cmdi,file-upload --max-depth 3 --max-pages 50
+```
