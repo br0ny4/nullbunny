@@ -3,5 +3,5 @@
   "compilerOptions": {
     "rootDir": "../.."
   },
-  "include": ["src", "../core/src", "../providers/src", "../judges/src", "../reporters/src", "../../apps/action/src"]
+  "include": ["src", "../core/src", "../providers/src", "../judges/src", "../reporters/src", "../web/src", "../../apps/action/src"]
 }

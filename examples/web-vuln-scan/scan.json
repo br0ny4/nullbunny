@@ -1,0 +1,13 @@
+{
+  "id": "vulhub-xxe",
+  "target": "http://localhost:8080",
+  "harPath": "../../reports/vulhub.har",
+  "vulns": [
+    { "type": "xxe" },
+    { "type": "xss" },
+    { "type": "sqli" },
+    { "type": "ssrf" },
+    { "type": "path-traversal" }
+  ],
+  "timeoutMs": 10000
+}

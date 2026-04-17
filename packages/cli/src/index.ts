@@ -179,6 +179,31 @@ export async function runCli(
     return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
   }
 
+  if (group === "web" && command === "vuln-scan") {
+    const flags = parseFlags(rest);
+    const configPath = readRequiredFlag(flags, "config");
+    const reportFormat = readReportFormat(flags);
+    const outputPath = readStringFlag(flags, "output");
+
+    const { loadWebVulnScanConfig, runWebVulnScan } = await import("@nullbunny/web");
+    const config = await loadWebVulnScanConfig(configPath);
+    const result = await runWebVulnScan(config);
+    const output = JSON.stringify(result, null, 2);
+
+    if (outputPath) {
+      const { renderWebVulnScanReport } = await import("@nullbunny/reporters");
+      await writeReportFile(outputPath, renderWebVulnScanReport(result, reportFormat));
+    }
+
+    if (result.summary.critical > 0 || result.summary.high > 0) {
+      console.error(output);
+      return { exitCode: 2, output };
+    }
+
+    console.log(output);
+    return { exitCode: result.summary.total > 0 ? 1 : 0, output };
+  }
+
   const output = helpText();
   console.log(output);
   return { exitCode: 0, output };
@@ -312,6 +337,8 @@ function helpText(): string {
     "  node packages/cli/dist/index.js web analyze-har --har ./reports/web.har",
     "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json",
     "  node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --baseline ./reports/web-baseline.json",
+    "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json",
+    "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json",
   ].join("\\n");
 }
 

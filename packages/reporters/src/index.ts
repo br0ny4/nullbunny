@@ -1,4 +1,5 @@
 import type { ScanRunResult } from "@nullbunny/core";
+import type { WebVulnScanResult } from "@nullbunny/web";
 
 export type ReportFormat = "json" | "markdown" | "sarif";
 
@@ -82,6 +83,95 @@ function renderSarifReport(result: ScanRunResult): string {
       {
         physicalLocation: {
           artifactLocation: { uri: result.target },
+        },
+      },
+    ],
+  }));
+
+  const sarif = {
+    $schema:
+      "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "NullBunny",
+            version: "0.1.0",
+            informationUri: "https://github.com/br0ny4/nullbunny",
+            rules,
+          },
+        },
+        results,
+      },
+    ],
+  };
+
+  return JSON.stringify(sarif, null, 2);
+}
+
+export function renderWebVulnScanReport(
+  result: WebVulnScanResult,
+  format: ReportFormat = "json",
+): string {
+  if (format === "markdown") {
+    return renderWebVulnScanMarkdown(result);
+  }
+
+  if (format === "sarif") {
+    return renderWebVulnScanSarif(result);
+  }
+
+  return JSON.stringify(result, null, 2);
+}
+
+function renderWebVulnScanMarkdown(result: WebVulnScanResult): string {
+  const lines = [
+    `# NullBunny Web Vulnerability Scan Report`,
+    ``,
+    `- Scan ID: ${result.scanId}`,
+    `- Target: ${result.target}`,
+    `- Summary: total=${result.summary.total} critical=${result.summary.critical} high=${result.summary.high} medium=${result.summary.medium} low=${result.summary.low} info=${result.summary.info}`,
+    ``,
+    `## Findings`,
+  ];
+
+  for (const finding of result.findings) {
+    lines.push(
+      `- [${finding.severity.toUpperCase()}] ${finding.vulnType} on ${finding.method} ${finding.url}`,
+      `  - Payload: ${finding.payload}`,
+      `  - Evidence: ${finding.evidence}`,
+      `  - Confirmed: ${finding.confirmed}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function renderWebVulnScanSarif(result: WebVulnScanResult): string {
+  const vulnTypes = [...new Set(result.findings.map((f) => f.vulnType))];
+
+  const rules = vulnTypes.map((vulnType) => ({
+    id: vulnType,
+    shortDescription: { text: vulnType },
+  }));
+
+  const severityToLevel: Record<string, string> = {
+    critical: "error",
+    high: "error",
+    medium: "warning",
+    low: "note",
+    info: "note",
+  };
+
+  const results = result.findings.map((f) => ({
+    ruleId: f.vulnType,
+    level: severityToLevel[f.severity] ?? "note",
+    message: { text: f.evidence },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: f.url },
         },
       },
     ],

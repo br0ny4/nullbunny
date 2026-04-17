@@ -14,6 +14,7 @@ NullBunny 是一个 Node.js/TypeScript 的 LLM 红队自动化扫描框架，面
 - Attack Packs：内置 OWASP LLM Top 10、RAG 上下文污染攻击包
 - GitHub Action：在 PR/Push 时运行扫描并归档报告
 - Web（实验）：无头浏览器登录并录制 HAR，便于"被动扫描/抓包导入"作为后续渗透扫描种子
+- Web Vuln Scan（实验）：传统 Web 漏洞探测（XXE/XSS/SQLi/SSRF/Path Traversal），基于 HAR 端点自动注入 payload
 
 ## 功能与路线图 (TODO)
 
@@ -41,6 +42,13 @@ NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 
 - **Web 渗透辅助 (实验性)**
   - [x] 基于无头浏览器 (Playwright) 的自动化登录与会话保持
   - [x] 自动录制 HAR 流量包以供离线分析
+- **传统 Web 漏洞探测 (实验性)**
+  - [x] XXE (XML External Entity) 检测
+  - [x] XSS (Cross-Site Scripting) 反射型检测
+  - [x] SQLi (SQL Injection) 错误/时间/布尔盲注检测
+  - [x] SSRF (Server-Side Request Forgery) 检测
+  - [x] Path Traversal 路径穿越检测
+  - [x] 自动对 GET 端点尝试 POST + 多种 Content-Type 注入
 
 ### 🟡 开发中 (In Progress)
 - **Web AI 黑盒扫描器 (`web scan`)**
@@ -61,7 +69,8 @@ NullBunny 致力于打造一个“开箱即用”且“适配企业 CI”的 AI 
   - [ ] Agentic AI 专属攻击包 (Tool Abuse / 越权执行)
 - **进阶 Web 渗透**
   - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
-  - [ ] 扩展至传统高危 Web 漏洞探测 (XSS/SQLi) 的轻量级扫描辅助
+  - [ ] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
+  - [ ] Web 漏洞扫描支持爬虫模式（自动发现端点）
 
 ## 快速开始（本地）
 
@@ -193,3 +202,15 @@ node packages/cli/dist/index.js web analyze-har --har ./reports/web.har
 ```bash
 node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --output ./reports/web-scan.json
 ```
+
+### Web 漏洞扫描（实验）
+
+基于 HAR 中发现的端点，自动注入传统 Web 漏洞 payload 并检测：
+
+```bash
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format markdown --output ./reports/vuln-scan.md
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json
+```
+
+支持的漏洞类型：XXE、XSS、SQLi、SSRF、Path Traversal。扫描器会自动对 GET 端点尝试 POST + 多种 Content-Type 注入。
