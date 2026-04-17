@@ -1,6 +1,6 @@
 import type { ScanRunResult } from "@nullbunny/core";
 
-export type ReportFormat = "json" | "markdown";
+export type ReportFormat = "json" | "markdown" | "sarif";
 
 export function renderReport(
   result: ScanRunResult,
@@ -8,6 +8,10 @@ export function renderReport(
 ): string {
   if (format === "markdown") {
     return renderMarkdownReport(result);
+  }
+
+  if (format === "sarif") {
+    return renderSarifReport(result);
   }
 
   return JSON.stringify(result, null, 2);
@@ -21,7 +25,8 @@ export function buildArchiveFilePath(
 ): string {
   const stamp = formatTimestamp(now);
   const safeScanId = sanitizePathSegment(result.scanId);
-  const extension = format === "markdown" ? "md" : "json";
+  const extension =
+    format === "markdown" ? "md" : format === "sarif" ? "sarif.json" : "json";
   return `${archiveDir}/${stamp}-${safeScanId}.${extension}`;
 }
 
@@ -59,4 +64,47 @@ function formatTimestamp(now: Date): string {
 
 function sanitizePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function renderSarifReport(result: ScanRunResult): string {
+  const categories = [...new Set(result.cases.map((c) => c.category))];
+
+  const rules = categories.map((category) => ({
+    id: category,
+    shortDescription: { text: category },
+  }));
+
+  const results = result.cases.map((c) => ({
+    ruleId: c.category,
+    level: c.outcome === "flagged" ? "error" : "note",
+    message: { text: c.reason },
+    locations: [
+      {
+        physicalLocation: {
+          artifactLocation: { uri: result.target },
+        },
+      },
+    ],
+  }));
+
+  const sarif = {
+    $schema:
+      "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "NullBunny",
+            version: "0.1.0",
+            informationUri: "https://github.com/br0ny4/nullbunny",
+            rules,
+          },
+        },
+        results,
+      },
+    ],
+  };
+
+  return JSON.stringify(sarif, null, 2);
 }

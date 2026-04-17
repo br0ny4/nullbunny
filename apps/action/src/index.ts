@@ -113,9 +113,16 @@ function readRequiredFlag(
 function readReportFormat(
   flags: Record<string, string | boolean>,
 ): ReportFormat {
-  return readStringFlag(flags, "report-format") === "markdown"
-    ? "markdown"
-    : "json";
+  const value = readStringFlag(flags, "report-format");
+  if (value === "markdown") {
+    return "markdown";
+  }
+
+  if (value === "sarif") {
+    return "sarif";
+  }
+
+  return "json";
 }
 
 const isDirectExecution = process.argv[1]
@@ -154,10 +161,13 @@ async function runGitHubAction(): Promise<number> {
   const outputPath = readOptionalInput("output");
   const failOnFlagged = readOptionalInput("fail_on_flagged") !== "false";
 
+  const resolvedFormat: ReportFormat =
+    reportFormat === "markdown" ? "markdown" : reportFormat === "sarif" ? "sarif" : "json";
+
   const actionResult = await runAction({
     configPath,
     archiveDir,
-    reportFormat: reportFormat === "markdown" ? "markdown" : "json",
+    reportFormat: resolvedFormat,
   });
 
   const baseline = await readBaselineReport(baselinePath);
@@ -166,7 +176,7 @@ async function runGitHubAction(): Promise<number> {
   if (outputPath) {
     await writeTextFile(
       outputPath,
-      renderReport(actionResult.scan, reportFormat === "markdown" ? "markdown" : "json"),
+      renderReport(actionResult.scan, resolvedFormat),
     );
   }
 

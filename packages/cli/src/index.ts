@@ -215,6 +215,18 @@ function buildProviderConfig(
     };
   }
 
+  if (provider === "anthropic") {
+    return {
+      id: readStringFlag(flags, "id") ?? "anthropic",
+      type: "anthropic",
+      baseUrl:
+        readStringFlag(flags, "base-url") ?? "https://api.anthropic.com",
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env.ANTHROPIC_API_KEY,
+      timeoutMs,
+    };
+  }
+
   throw new Error(`Unsupported provider type: ${provider}`);
 }
 
@@ -269,6 +281,10 @@ function readReportFormat(
     return "markdown";
   }
 
+  if (value === "sarif") {
+    return "sarif";
+  }
+
   return "json";
 }
 
@@ -284,9 +300,11 @@ function helpText(): string {
     "Commands:",
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
     "  node packages/cli/dist/index.js providers test --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model local-model",
+    "  node packages/cli/dist/index.js providers test --provider anthropic --model claude-sonnet-4-20250514",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
     "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",

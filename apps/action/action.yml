@@ -12,7 +12,7 @@ inputs:
     required: false
     default: ./reports/archive
   report_format:
-    description: json or markdown
+    description: json, markdown, or sarif
     required: false
     default: json
   output:

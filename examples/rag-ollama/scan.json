@@ -1,0 +1,33 @@
+{
+  "id": "rag-ollama-scan",
+  "target": "local-chat-app",
+  "provider": {
+    "id": "ollama-local",
+    "type": "ollama",
+    "baseUrl": "http://127.0.0.1:11434",
+    "model": "qwen2.5:7b",
+    "timeoutMs": 15000
+  },
+  "bridge": {
+    "manifestPaths": ["../extensions/rag-context-poisoning-pack.json"]
+  },
+  "attacks": [
+    { "plugin": "rag/doc-inject-system-override-en" },
+    { "plugin": "rag/doc-inject-system-override-zh" },
+    { "plugin": "rag/doc-inject-data-exfil" },
+    { "plugin": "rag/retrieval-manipulation-sensitive-docs" },
+    { "plugin": "rag/retrieval-manipulation-sensitive-docs-zh" },
+    { "plugin": "rag/retrieval-manipulation-ranking" },
+    { "plugin": "rag/context-overflow-repeat" },
+    { "plugin": "rag/context-overflow-push-safety" },
+    { "plugin": "rag/embedding-confusion-homoglyph" },
+    { "plugin": "rag/embedding-confusion-zerowidth" },
+    { "plugin": "rag/source-fabrication-citation" },
+    { "plugin": "rag/source-fabrication-citation-zh" },
+    { "plugin": "rag/source-fabrication-trust-unverified" },
+    { "plugin": "rag/source-fabrication-fake-reference" }
+  ],
+  "judge": {
+    "plugin": "rag/keyword-leak"
+  }
+}

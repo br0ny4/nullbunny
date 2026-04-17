@@ -1,4 +1,4 @@
-export type ProviderType = "ollama" | "openai-compatible";
+export type ProviderType = "ollama" | "openai-compatible" | "anthropic";
 
 export interface ProviderConfig {
   id: string;
@@ -50,10 +50,21 @@ export function createProvider(config: ProviderConfig): ModelProvider {
     config: normalized,
     async healthCheck() {
       const startedAt = Date.now();
-      const path = normalized.type === "ollama" ? "/api/tags" : "/models";
+      const path =
+        normalized.type === "ollama"
+          ? "/api/tags"
+          : normalized.type === "anthropic"
+            ? "/v1/models"
+            : "/models";
       const headers: Record<string, string> = {};
       if (normalized.type === "openai-compatible" && normalized.apiKey) {
         headers.authorization = `Bearer ${normalized.apiKey}`;
+      }
+      if (normalized.type === "anthropic") {
+        if (normalized.apiKey) {
+          headers["x-api-key"] = normalized.apiKey;
+        }
+        headers["anthropic-version"] = "2023-06-01";
       }
 
       try {
@@ -65,7 +76,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
         const models =
           normalized.type === "ollama"
             ? readOllamaModels(body)
-            : readOpenAICompatibleModels(body);
+            : normalized.type === "anthropic"
+              ? readAnthropicModels(body)
+              : readOpenAICompatibleModels(body);
 
         if (
           normalized.model &&
@@ -114,7 +127,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
         const text =
           normalized.type === "ollama"
             ? await generateWithOllama(normalized, prompt)
-            : await generateWithOpenAICompatible(normalized, prompt);
+            : normalized.type === "anthropic"
+              ? await generateWithAnthropic(normalized, prompt)
+              : await generateWithOpenAICompatible(normalized, prompt);
 
         return {
           ok: true,
@@ -314,4 +329,69 @@ function readOpenAICompatibleText(body: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null;
+}
+
+function readAnthropicModels(body: unknown): string[] {
+  if (!isRecord(body) || !Array.isArray(body.data)) {
+    return [];
+  }
+
+  return body.data
+    .map((entry) =>
+      isRecord(entry) && typeof entry.id === "string" ? entry.id : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+}
+
+async function generateWithAnthropic(
+  config: ProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "anthropic-version": "2023-06-01",
+  };
+  if (config.apiKey) {
+    headers["x-api-key"] = config.apiKey;
+  }
+
+  const body = await request(
+    `${config.baseUrl}/v1/messages`,
+    config.timeoutMs ?? 10_000,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 4096,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    },
+  );
+
+  const text = readAnthropicText(body);
+  if (text) {
+    return text;
+  }
+
+  throw new Error("Invalid Anthropic generation response");
+}
+
+function readAnthropicText(body: unknown): string | undefined {
+  if (!isRecord(body) || !Array.isArray(body.content)) {
+    return undefined;
+  }
+
+  for (const block of body.content) {
+    if (isRecord(block) && block.type === "text" && typeof block.text === "string") {
+      return block.text;
+    }
+  }
+
+  return undefined;
 }
