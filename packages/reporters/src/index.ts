@@ -1,5 +1,6 @@
 import type { ScanRunResult } from "@nullbunny/core";
 import type { WebVulnScanResult } from "@nullbunny/web";
+import type { ReconScanResult } from "@nullbunny/recon";
 
 export type ReportFormat = "json" | "markdown" | "sarif";
 
@@ -103,6 +104,92 @@ function renderSarifReport(result: ScanRunResult): string {
           },
         },
         results,
+      },
+    ],
+  };
+
+  return JSON.stringify(sarif, null, 2);
+}
+
+export function renderReconReport(
+  result: ReconScanResult,
+  format: ReportFormat = "json",
+): string {
+  if (format === "markdown") {
+    return renderReconMarkdown(result);
+  }
+
+  if (format === "sarif") {
+    return renderReconSarif(result);
+  }
+
+  return JSON.stringify(result, null, 2);
+}
+
+function renderReconMarkdown(result: ReconScanResult): string {
+  const lines = [
+    `# NullBunny Recon Report`,
+    ``,
+    `- Scan ID: ${result.scanId}`,
+    `- Target: ${result.target}`,
+    `- Summary: targets=${result.summary.targets} open=${result.summary.open}`,
+    ``,
+    `## Findings`,
+  ];
+
+  for (const item of result.results) {
+    if (item.open) {
+      lines.push(`- **${item.host}:${item.port}** is OPEN`);
+      if (item.banner) {
+        const linesOfBanner = item.banner.split("\\n");
+        lines.push(`  - Banner: \`${linesOfBanner[0]}\``);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function renderReconSarif(result: ReconScanResult): string {
+  const rules = [
+    {
+      id: "open-port",
+      shortDescription: { text: "Open TCP Port" },
+    },
+  ];
+
+  const sarifResults = result.results
+    .filter((r) => r.open)
+    .map((r) => ({
+      ruleId: "open-port",
+      level: "note",
+      message: {
+        text: `Port ${r.port} is open on ${r.host}${r.banner ? `\\nBanner: ${r.banner}` : ""}`,
+      },
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: `tcp://${r.host}:${r.port}` },
+          },
+        },
+      ],
+    }));
+
+  const sarif = {
+    $schema:
+      "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    version: "2.1.0",
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: "NullBunny Recon",
+            version: "0.1.0",
+            informationUri: "https://github.com/br0ny4/nullbunny",
+            rules,
+          },
+        },
+        results: sarifResults,
       },
     ],
   };

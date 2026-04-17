@@ -125,6 +125,7 @@ export async function runCli(
     const subdomainsDomain = readStringFlag(flags, "subdomains");
     const wordlistValue = readStringFlag(flags, "wordlist");
     const outputPath = readStringFlag(flags, "output");
+    const reportFormat = readReportFormat(flags);
 
     const hosts = hostsValue
       .split(",")
@@ -148,10 +149,12 @@ export async function runCli(
       grabBanner,
       subdomains,
     });
+
     const output = JSON.stringify(result, null, 2);
 
     if (outputPath) {
-      await writeReportFile(outputPath, output);
+      const { renderReconReport } = await import("@nullbunny/reporters");
+      await writeReportFile(outputPath, renderReconReport(result, reportFormat));
     }
 
     console.log(output);

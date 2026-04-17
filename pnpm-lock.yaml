@@ -44,6 +44,9 @@ importers:
       '@nullbunny/providers':
         specifier: workspace:*
         version: link:../providers
+      '@nullbunny/recon':
+        specifier: workspace:*
+        version: link:../recon
       '@nullbunny/reporters':
         specifier: workspace:*
         version: link:../reporters
@@ -92,7 +95,13 @@ importers:
 
   packages/providers: {}
 
-  packages/reporters: {}
+  packages/recon: {}
+
+  packages/reporters:
+    dependencies:
+      '@nullbunny/recon':
+        specifier: workspace:*
+        version: link:../recon
 
   packages/web:
     dependencies:
