@@ -353,14 +353,21 @@ function inferLlmEndpoint(url: string, request: any): string | undefined {
     return "openai-compatible completions path";
   }
 
+  if (url.includes("/api/chat") || url.includes("/api/v1/chat")) {
+    return "common chat api path";
+  }
+
   const contentType = getHeader(request?.headers, "content-type");
   if (contentType && contentType.includes("application/json")) {
     const text = request?.postData?.text;
     if (typeof text === "string") {
       try {
         const parsed = JSON.parse(text) as any;
-        if (Array.isArray(parsed?.messages) && typeof parsed?.model === "string") {
+        if (Array.isArray(parsed?.messages)) {
           return "openai-compatible request shape";
+        }
+        if (typeof parsed?.prompt === "string" || typeof parsed?.query === "string" || typeof parsed?.message === "string") {
+          return "custom chat request shape";
         }
       } catch {
         return undefined;
@@ -456,9 +463,6 @@ function selectLlmRequestTemplate(
 
     const body = parseJsonBody(req);
     if (!body) {
-      continue;
-    }
-    if (!Array.isArray((body as any).messages)) {
       continue;
     }
 
@@ -589,17 +593,36 @@ function injectPromptIntoOpenAICompatibleBody(
     cloned.stream = false;
   }
 
-  const messages = Array.isArray((cloned as any).messages) ? [...((cloned as any).messages as any[])] : [];
-  const lastUserIndex = findLastUserMessageIndex(messages);
-  if (lastUserIndex >= 0) {
-    const msg = isRecord(messages[lastUserIndex]) ? { ...(messages[lastUserIndex] as any) } : {};
-    msg.role = "user";
-    msg.content = prompt;
-    messages[lastUserIndex] = msg;
-  } else {
-    messages.push({ role: "user", content: prompt });
+  // Handle OpenAI-compatible shape
+  if (Array.isArray((cloned as any).messages)) {
+    const messages = [...((cloned as any).messages as any[])];
+    const lastUserIndex = findLastUserMessageIndex(messages);
+    if (lastUserIndex >= 0) {
+      const msg = isRecord(messages[lastUserIndex]) ? { ...(messages[lastUserIndex] as any) } : {};
+      msg.role = "user";
+      msg.content = prompt;
+      messages[lastUserIndex] = msg;
+    } else {
+      messages.push({ role: "user", content: prompt });
+    }
+    (cloned as any).messages = messages;
+    return cloned;
   }
-  (cloned as any).messages = messages;
+
+  // Handle custom API shapes
+  if (typeof cloned.prompt === "string") {
+    cloned.prompt = prompt;
+    return cloned;
+  }
+  if (typeof cloned.query === "string") {
+    cloned.query = prompt;
+    return cloned;
+  }
+  if (typeof cloned.message === "string") {
+    cloned.message = prompt;
+    return cloned;
+  }
+
   return cloned;
 }
 
@@ -664,21 +687,40 @@ function findLastUserMessageIndex(messages: any[]): number {
 }
 
 function readOpenAICompatibleText(body: unknown): string | undefined {
-  if (!isRecord(body) || !Array.isArray((body as any).choices)) {
+  if (!isRecord(body)) {
     return undefined;
   }
-  for (const choice of (body as any).choices) {
-    if (!isRecord(choice)) {
-      continue;
-    }
-    if (typeof (choice as any).text === "string") {
-      return (choice as any).text;
-    }
-    const message = (choice as any).message;
-    if (isRecord(message) && typeof (message as any).content === "string") {
-      return (message as any).content;
+
+  // Handle standard OpenAI shape
+  if (Array.isArray((body as any).choices)) {
+    for (const choice of (body as any).choices) {
+      if (!isRecord(choice)) {
+        continue;
+      }
+      if (typeof (choice as any).text === "string") {
+        return (choice as any).text;
+      }
+      const message = (choice as any).message;
+      if (isRecord(message) && typeof (message as any).content === "string") {
+        return (message as any).content;
+      }
     }
   }
+
+  // Handle common custom shapes
+  if (typeof (body as any).response === "string") {
+    return (body as any).response;
+  }
+  if (typeof (body as any).answer === "string") {
+    return (body as any).answer;
+  }
+  if (typeof (body as any).text === "string") {
+    return (body as any).text;
+  }
+  if (typeof (body as any).message === "string") {
+    return (body as any).message;
+  }
+
   return undefined;
 }
 
