@@ -1,4 +1,21 @@
-export type ProviderType = "ollama" | "openai-compatible" | "anthropic" | "deepseek" | "gemini" | "azure-openai";
+export type ProviderType = 
+  | "ollama" 
+  | "openai-compatible" 
+  | "anthropic" 
+  | "deepseek" 
+  | "gemini" 
+  | "azure-openai"
+  | "siliconflow"
+  | "groq"
+  | "together"
+  | "mistral"
+  | "openrouter"
+  | "alibaba"
+  | "volcengine"
+  | "tencent"
+  | "perplexity"
+  | "xai"
+  | "cohere";
 
 export interface ProviderConfig {
   id: string;
@@ -76,6 +93,11 @@ export function createProvider(config: ProviderConfig): ModelProvider {
         if (normalized.apiKey) {
           headers["api-key"] = normalized.apiKey;
         }
+      } else if (normalized.type === "cohere") {
+        url = `${normalized.baseUrl}/models`;
+        if (normalized.apiKey) {
+          headers.authorization = `Bearer ${normalized.apiKey}`;
+        }
       } else {
         if (normalized.apiKey) {
           headers.authorization = `Bearer ${normalized.apiKey}`;
@@ -99,7 +121,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
                   ? readGeminiModels(body)
                   : normalized.type === "azure-openai"
                     ? readAzureOpenAIModels(body)
-                    : readOpenAICompatibleModels(body);
+                    : normalized.type === "cohere"
+                      ? readCohereModels(body)
+                      : readOpenAICompatibleModels(body);
 
         if (
           normalized.model &&
@@ -156,7 +180,9 @@ export function createProvider(config: ProviderConfig): ModelProvider {
                   ? await generateWithGemini(normalized, prompt)
                   : normalized.type === "azure-openai"
                     ? await generateWithAzureOpenAI(normalized, prompt)
-                    : await generateWithOpenAICompatible(normalized, prompt);
+                    : normalized.type === "cohere"
+                      ? await generateWithCohere(normalized, prompt)
+                      : await generateWithOpenAICompatible(normalized, prompt);
 
         return {
           ok: true,
@@ -585,4 +611,51 @@ async function generateWithAzureOpenAI(
   }
 
   throw new Error("Invalid Azure OpenAI generation response");
+}
+
+function readCohereModels(body: unknown): string[] {
+  if (!isRecord(body) || !Array.isArray(body.models)) {
+    return [];
+  }
+
+  return body.models
+    .map((entry) =>
+      isRecord(entry) && typeof entry.name === "string" ? entry.name : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+}
+
+async function generateWithCohere(
+  config: ProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (config.apiKey) {
+    headers.authorization = `Bearer ${config.apiKey}`;
+  }
+
+  const modelName = config.model ?? "command-r";
+  const url = `${config.baseUrl}/chat`;
+
+  const body = await request(
+    url,
+    config.timeoutMs ?? 10_000,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: prompt,
+        model: modelName,
+      }),
+    },
+  );
+
+  if (isRecord(body) && typeof body.text === "string") {
+    return body.text;
+  }
+
+  throw new Error("Invalid Cohere generation response");
 }

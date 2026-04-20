@@ -32,6 +32,26 @@ export default function Settings() {
               <label className="block text-sm font-medium text-textMuted uppercase tracking-wider">DeepSeek API Key</label>
               <input type="password" placeholder="sk-..." className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono" />
             </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-textMuted uppercase tracking-wider">Groq API Key</label>
+              <input type="password" placeholder="gsk_..." className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-textMuted uppercase tracking-wider">SiliconFlow API Key</label>
+              <input type="password" placeholder="sk-..." className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-textMuted uppercase tracking-wider">Mistral API Key</label>
+              <input type="password" placeholder="mistral-..." className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-textMuted uppercase tracking-wider">Cohere API Key</label>
+              <input type="password" placeholder="cohere-..." className="w-full bg-surface border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono" />
+            </div>
             
             <div className="col-span-1 md:col-span-2 p-6 bg-surface/50 border border-border rounded-lg space-y-4">
               <h4 className="text-lg font-bold text-white">Azure OpenAI</h4>

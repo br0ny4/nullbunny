@@ -255,7 +255,7 @@ function isProviderConfig(value: unknown): value is ProviderConfig {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
-    (value.type === "ollama" || value.type === "openai-compatible" || value.type === "anthropic" || value.type === "deepseek" || value.type === "gemini" || value.type === "azure-openai") &&
+    ["ollama", "openai-compatible", "anthropic", "deepseek", "gemini", "azure-openai", "siliconflow", "groq", "together", "mistral", "openrouter", "alibaba", "volcengine", "tencent", "perplexity", "xai", "cohere"].includes(value.type as string) &&
     typeof value.baseUrl === "string" &&
     (value.model === undefined || typeof value.model === "string") &&
     (value.apiKey === undefined || typeof value.apiKey === "string") &&

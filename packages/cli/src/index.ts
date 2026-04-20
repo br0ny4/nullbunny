@@ -451,6 +451,32 @@ function buildProviderConfig(
     };
   }
 
+  const standardProviders: Record<string, { defaultBase: string, envKey: string }> = {
+    "siliconflow": { defaultBase: "https://api.siliconflow.cn/v1", envKey: "SILICONFLOW_API_KEY" },
+    "groq": { defaultBase: "https://api.groq.com/openai/v1", envKey: "GROQ_API_KEY" },
+    "together": { defaultBase: "https://api.together.xyz/v1", envKey: "TOGETHER_API_KEY" },
+    "mistral": { defaultBase: "https://api.mistral.ai/v1", envKey: "MISTRAL_API_KEY" },
+    "openrouter": { defaultBase: "https://openrouter.ai/api/v1", envKey: "OPENROUTER_API_KEY" },
+    "alibaba": { defaultBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", envKey: "ALIBABA_API_KEY" },
+    "volcengine": { defaultBase: "https://ark.cn-beijing.volces.com/api/v3", envKey: "VOLCENGINE_API_KEY" },
+    "tencent": { defaultBase: "https://api.hunyuan.cloud.tencent.com/v1", envKey: "TENCENT_API_KEY" },
+    "perplexity": { defaultBase: "https://api.perplexity.ai", envKey: "PERPLEXITY_API_KEY" },
+    "xai": { defaultBase: "https://api.x.ai/v1", envKey: "XAI_API_KEY" },
+    "cohere": { defaultBase: "https://api.cohere.com/v1", envKey: "COHERE_API_KEY" }
+  };
+
+  if (provider in standardProviders) {
+    const pInfo = standardProviders[provider];
+    return {
+      id: readStringFlag(flags, "id") ?? provider,
+      type: provider as any,
+      baseUrl: readStringFlag(flags, "base-url") ?? pInfo.defaultBase,
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env[pInfo.envKey],
+      timeoutMs,
+    };
+  }
+
   throw new Error(`Unsupported provider type: ${provider}`);
 }
 
