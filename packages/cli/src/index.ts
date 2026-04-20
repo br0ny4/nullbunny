@@ -342,6 +342,32 @@ export async function runCli(
     return { exitCode: result.summary.total > 0 ? 1 : 0, output };
   }
 
+  if (group === "web" && command === "gui") {
+    const { spawn } = await import("node:child_process");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const rootDir = join(__dirname, "../../../");
+
+    const serverPath = join(rootDir, "apps/gui/server/index.js");
+    
+    console.log("Starting NullBunny Web GUI on http://localhost:3001 ...");
+
+    const serverProcess = spawn("node", [serverPath], {
+      stdio: "inherit",
+      cwd: join(rootDir, "apps/gui"),
+      env: { ...process.env, PORT: "3001" }
+    });
+
+    await new Promise(() => {
+      // Keep process alive
+    });
+    
+    return { exitCode: 0, output: "GUI Closed" };
+  }
+
   const output = helpText();
   console.log(output);
   return { exitCode: 0, output };
@@ -516,6 +542,7 @@ function helpText(): string {
     "  web scan         Execute a Web AI scan based on HAR endpoints",
     "  web crawl        Crawl a website to discover endpoints automatically",
     "  web vuln-scan    Execute a Web vulnerability scan based on config or crawled endpoints",
+    "  web gui          Start the Web GUI interface for NullBunny",
     "  recon scan       Execute port scanning, subdomain enumeration and banner grabbing",
     "",
     "Flags (providers test):",
@@ -575,6 +602,7 @@ function helpText(): string {
     "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
     "",
     "Examples:",
+    "  node packages/cli/dist/index.js web gui",
     "  node packages/cli/dist/index.js mcp start",
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
     "  node packages/cli/dist/index.js providers test --provider gemini --model gemini-2.0-flash",
