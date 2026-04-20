@@ -396,6 +396,29 @@ function buildProviderConfig(
     };
   }
 
+  if (provider === "gemini") {
+    return {
+      id: readStringFlag(flags, "id") ?? "gemini",
+      type: "gemini",
+      baseUrl:
+        readStringFlag(flags, "base-url") ?? "https://generativelanguage.googleapis.com",
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env.GEMINI_API_KEY,
+      timeoutMs,
+    };
+  }
+
+  if (provider === "azure-openai") {
+    return {
+      id: readStringFlag(flags, "id") ?? "azure-openai",
+      type: "azure-openai",
+      baseUrl: readRequiredFlag(flags, "base-url"),
+      model,
+      apiKey: readStringFlag(flags, "api-key") ?? process.env.AZURE_OPENAI_API_KEY,
+      timeoutMs,
+    };
+  }
+
   throw new Error(`Unsupported provider type: ${provider}`);
 }
 
@@ -466,13 +489,87 @@ function helpText(): string {
   return [
     "NullBunny CLI",
     "",
+    "Usage:",
+    "  nullbunny <group> <command> [flags]",
+    "",
+    "Groups:",
+    "  providers   Manage and test LLM providers",
+    "  scan        Run LLM security scans",
+    "  action      Run as GitHub Action",
+    "  web         Run Web AI and Vulnerability Scans",
+    "  recon       Run Infrastructure Reconnaissance",
+    "",
     "Commands:",
+    "  providers test   Test provider connectivity and model availability",
+    "  scan run         Execute an LLM security scan",
+    "  action run       Execute GitHub Action workflow",
+    "  web record-har   Record a web browsing session to HAR using Playwright",
+    "  web analyze-har  Analyze a HAR file to discover LLM API endpoints",
+    "  web scan         Execute a Web AI scan based on HAR endpoints",
+    "  web crawl        Crawl a website to discover endpoints automatically",
+    "  web vuln-scan    Execute a Web vulnerability scan based on config or crawled endpoints",
+    "  recon scan       Execute port scanning, subdomain enumeration and banner grabbing",
+    "",
+    "Flags (providers test):",
+    "  --provider <name>        Provider type (ollama, openai-compatible, anthropic, deepseek, gemini, azure-openai)",
+    "  --model <name>           Model identifier to test",
+    "  --base-url <url>         Provider API base URL (required for azure-openai)",
+    "  --api-key <key>          Provider API key",
+    "",
+    "Flags (scan run / action run):",
+    "  --config <path>          Path to scan.json config file",
+    "  --baseline <path>        Path to previous scan report (for incremental scan)",
+    "  --output <path>          Path to write the report file",
+    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --archive-dir <path>     Directory to store archived reports (action only)",
+    "",
+    "Flags (recon scan):",
+    "  --hosts <ips>            Comma-separated IPs/Hostnames (default: 127.0.0.1)",
+    "  --ports <ranges>         Comma-separated ports/ranges (e.g. 80,443,8000-8080)",
+    "  --subdomains <domain>    Domain for subdomain enumeration",
+    "  --wordlist <words>       Comma-separated prefixes for enumeration",
+    "  --banner <bool>          Whether to grab service banners (true/false)",
+    "  --detect-middleware <bool> Whether to detect default middleware configs (true/false)",
+    "  --output <path>          Path to write the report file",
+    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "",
+    "Flags (web record-har):",
+    "  --url <url>              Target URL to start recording",
+    "  --har <path>             Path to output HAR file",
+    "  --steps <path>           Optional JSON file with Playwright interaction steps",
+    "  --headed <bool>          Run browser in headed mode (true/false)",
+    "  --final-wait-ms <ms>     Wait time before closing browser",
+    "",
+    "Flags (web analyze-har):",
+    "  --har <path>             Path to input HAR file",
+    "",
+    "Flags (web scan):",
+    "  --config <path>          Path to web-scan.json config file",
+    "  --baseline <path>        Path to previous web scan report",
+    "  --output <path>          Path to write the report file",
+    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "",
+    "Flags (web crawl):",
+    "  --url <url>              Target URL to start crawling",
+    "  --max-depth <num>        Maximum crawl depth (default: 2)",
+    "  --max-pages <num>        Maximum pages to crawl (default: 20)",
+    "  --timeout-ms <ms>        Timeout for crawler",
+    "  --output <path>          Path to write crawl result JSON",
+    "",
+    "Flags (web vuln-scan):",
+    "  --config <path>          Path to web-vuln-scan.json config file",
+    "  --crawl-url <url>        Crawl and scan immediately without config file",
+    "  --vulns <types>          Comma-separated vulnerability types to test (e.g. xxe,xss,sqli)",
+    "  --max-depth <num>        Maximum crawl depth if using --crawl-url",
+    "  --max-pages <num>        Maximum pages to crawl if using --crawl-url",
+    "  --timeout-ms <ms>        Timeout for requests",
+    "  --output <path>          Path to write the report file",
+    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "",
+    "Examples:",
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
-    "  node packages/cli/dist/index.js providers test --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model local-model",
-    "  node packages/cli/dist/index.js providers test --provider anthropic --model claude-sonnet-4-20250514",
-    "  node packages/cli/dist/index.js providers test --provider deepseek --model deepseek-chat",
+    "  node packages/cli/dist/index.js providers test --provider gemini --model gemini-2.0-flash",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
-    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
@@ -487,7 +584,7 @@ function helpText(): string {
     "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json",
     "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json",
     "  node packages/cli/dist/index.js web vuln-scan --crawl-url https://example.com --vulns xxe,xss,sqli --output ./reports/vuln-scan.json",
-  ].join("\\n");
+  ].join("\n");
 }
 
 async function countNewFlagged(

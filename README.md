@@ -81,12 +81,12 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
 
 ### ⚪ 计划中 (Planned)
 - **更多商业大模型原生支持**
-  - [ ] Gemini API 原生支持
-  - [ ] Azure OpenAI 原生支持
+  - [x] Gemini API 原生支持
+  - [x] Azure OpenAI 原生支持
 - **高级漏洞检测**
   - [x] 反序列化漏洞检测
 - **进阶 Web 渗透**
-  - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
+  - [x] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
   - [x] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
   - [x] Web 漏洞扫描支持爬虫模式（自动发现端点）
   - [ ] 认证绕过 / 权限提升自动化检测
@@ -109,6 +109,8 @@ Provider 连通性检查：
 
 ```bash
 node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b
+node packages/cli/dist/index.js providers test --provider gemini --model gemini-2.0-flash
+node packages/cli/dist/index.js providers test --provider azure-openai --base-url https://my-resource.openai.azure.com --model gpt-4o
 node packages/cli/dist/index.js providers test --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model local-model
 node packages/cli/dist/index.js providers test --provider anthropic --model claude-sonnet-4-20250514
 node packages/cli/dist/index.js providers test --provider deepseek --model deepseek-chat

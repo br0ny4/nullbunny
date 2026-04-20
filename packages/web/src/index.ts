@@ -668,8 +668,25 @@ function extractHarEndpoints(har: any): HarEndpoint[] {
     const endpoint: HarEndpoint = { method, url, headers };
 
     if (req.postData) {
+      let text = typeof req.postData.text === "string" ? req.postData.text : undefined;
+      // Handle mitmproxy / Chrome base64 encoding or other custom HAR fields if needed
+      if (req.postData.encoding === "base64" && text) {
+        try {
+          text = Buffer.from(text, "base64").toString("utf-8");
+        } catch {}
+      } else if (!text && Array.isArray(req.postData.params)) {
+        // Some HAR generators put form data in params instead of text
+        try {
+          const params = new URLSearchParams();
+          for (const p of req.postData.params) {
+            if (p.name) params.append(p.name, p.value ?? "");
+          }
+          text = params.toString();
+        } catch {}
+      }
+
       endpoint.postData = {
-        text: typeof req.postData.text === "string" ? req.postData.text : undefined,
+        text,
         mimeType: typeof req.postData.mimeType === "string" ? req.postData.mimeType : undefined,
       };
     }

@@ -1,4 +1,4 @@
-export type ProviderType = "ollama" | "openai-compatible" | "anthropic" | "deepseek";
+export type ProviderType = "ollama" | "openai-compatible" | "anthropic" | "deepseek" | "gemini" | "azure-openai";
 
 export interface ProviderConfig {
   id: string;
@@ -50,31 +50,41 @@ export function createProvider(config: ProviderConfig): ModelProvider {
     config: normalized,
     async healthCheck() {
       const startedAt = Date.now();
-      const path =
-        normalized.type === "ollama"
-          ? "/api/tags"
-          : normalized.type === "anthropic"
-            ? "/v1/models"
-            : normalized.type === "deepseek"
-              ? "/v1/models"
-              : "/models";
+      let url = `${normalized.baseUrl}/models`;
       const headers: Record<string, string> = {};
-      if (normalized.type === "openai-compatible" && normalized.apiKey) {
-        headers.authorization = `Bearer ${normalized.apiKey}`;
-      }
-      if (normalized.type === "anthropic") {
+
+      if (normalized.type === "ollama") {
+        url = `${normalized.baseUrl}/api/tags`;
+      } else if (normalized.type === "anthropic") {
+        url = `${normalized.baseUrl}/v1/models`;
         if (normalized.apiKey) {
           headers["x-api-key"] = normalized.apiKey;
         }
         headers["anthropic-version"] = "2023-06-01";
-      }
-      if (normalized.type === "deepseek" && normalized.apiKey) {
-        headers.authorization = `Bearer ${normalized.apiKey}`;
+      } else if (normalized.type === "deepseek") {
+        url = `${normalized.baseUrl}/v1/models`;
+        if (normalized.apiKey) {
+          headers.authorization = `Bearer ${normalized.apiKey}`;
+        }
+      } else if (normalized.type === "gemini") {
+        url = `${normalized.baseUrl}/v1beta/models`;
+        if (normalized.apiKey) {
+          headers["x-goog-api-key"] = normalized.apiKey;
+        }
+      } else if (normalized.type === "azure-openai") {
+        url = `${normalized.baseUrl}/models?api-version=2024-02-01`;
+        if (normalized.apiKey) {
+          headers["api-key"] = normalized.apiKey;
+        }
+      } else {
+        if (normalized.apiKey) {
+          headers.authorization = `Bearer ${normalized.apiKey}`;
+        }
       }
 
       try {
         const body = await requestJson(
-          `${normalized.baseUrl}${path}`,
+          url,
           normalized.timeoutMs ?? 10_000,
           headers,
         );
@@ -85,7 +95,11 @@ export function createProvider(config: ProviderConfig): ModelProvider {
               ? readAnthropicModels(body)
               : normalized.type === "deepseek"
                 ? readDeepSeekModels(body)
-                : readOpenAICompatibleModels(body);
+                : normalized.type === "gemini"
+                  ? readGeminiModels(body)
+                  : normalized.type === "azure-openai"
+                    ? readAzureOpenAIModels(body)
+                    : readOpenAICompatibleModels(body);
 
         if (
           normalized.model &&
@@ -138,7 +152,11 @@ export function createProvider(config: ProviderConfig): ModelProvider {
               ? await generateWithAnthropic(normalized, prompt)
               : normalized.type === "deepseek"
                 ? await generateWithDeepSeek(normalized, prompt)
-                : await generateWithOpenAICompatible(normalized, prompt);
+                : normalized.type === "gemini"
+                  ? await generateWithGemini(normalized, prompt)
+                  : normalized.type === "azure-openai"
+                    ? await generateWithAzureOpenAI(normalized, prompt)
+                    : await generateWithOpenAICompatible(normalized, prompt);
 
         return {
           ok: true,
@@ -453,4 +471,118 @@ async function generateWithDeepSeek(
   }
 
   throw new Error("Invalid DeepSeek generation response");
+}
+
+function readGeminiModels(body: unknown): string[] {
+  if (!isRecord(body) || !Array.isArray(body.models)) {
+    return [];
+  }
+
+  return body.models
+    .map((entry) =>
+      isRecord(entry) && typeof entry.name === "string" ? entry.name.replace("models/", "") : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+}
+
+async function generateWithGemini(
+  config: ProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (config.apiKey) {
+    headers["x-goog-api-key"] = config.apiKey;
+  }
+
+  const modelName = config.model ?? "gemini-2.0-flash";
+  const url = `${config.baseUrl}/v1beta/models/${modelName}:generateContent`;
+
+  const body = await request(
+    url,
+    config.timeoutMs ?? 10_000,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+    },
+  );
+
+  if (
+    isRecord(body) &&
+    Array.isArray(body.candidates) &&
+    body.candidates.length > 0 &&
+    isRecord(body.candidates[0]) &&
+    isRecord(body.candidates[0].content) &&
+    Array.isArray(body.candidates[0].content.parts) &&
+    body.candidates[0].content.parts.length > 0 &&
+    isRecord(body.candidates[0].content.parts[0]) &&
+    typeof body.candidates[0].content.parts[0].text === "string"
+  ) {
+    return body.candidates[0].content.parts[0].text;
+  }
+
+  throw new Error("Invalid Gemini generation response");
+}
+
+function readAzureOpenAIModels(body: unknown): string[] {
+  if (!isRecord(body) || !Array.isArray(body.data)) {
+    return [];
+  }
+
+  return body.data
+    .map((entry) =>
+      isRecord(entry) && typeof entry.id === "string" ? entry.id : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+}
+
+async function generateWithAzureOpenAI(
+  config: ProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (config.apiKey) {
+    headers["api-key"] = config.apiKey;
+  }
+
+  const modelName = config.model ?? "gpt-4o";
+  const url = `${config.baseUrl}/deployments/${modelName}/chat/completions?api-version=2024-02-01`;
+
+  const body = await request(
+    url,
+    config.timeoutMs ?? 10_000,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    },
+  );
+
+  const text = readOpenAICompatibleText(body);
+  if (text) {
+    return text;
+  }
+
+  throw new Error("Invalid Azure OpenAI generation response");
 }

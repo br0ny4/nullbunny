@@ -58,7 +58,7 @@ jobs:
 
       - name: Run Web Vuln Scan
         run: |
-          FORMAT="${{ github.event.inputs.report_format || 'sarif' }}"
+          FORMAT="${{ github.event.inputs.report_format || 'markdown' }}"
           if [ "$FORMAT" = "markdown" ]; then
             EXT="md"
           elif [ "$FORMAT" = "sarif" ]; then
@@ -70,6 +70,13 @@ jobs:
             --config ./reports/vuln-scan.json \
             --report-format "$FORMAT" \
             --output "./reports/vuln-results.$EXT"
+            
+          if [ "$FORMAT" != "markdown" ] && [ "${{ github.event_name }}" = "pull_request" ]; then
+            node packages/cli/dist/index.js web vuln-scan \
+              --config ./reports/vuln-scan.json \
+              --report-format "markdown" \
+              --output "./reports/vuln-results.md"
+          fi
         continue-on-error: true
 
       - name: Upload SARIF to Code Scanning
@@ -86,3 +93,26 @@ jobs:
           name: nullbunny-web-vuln-report
           path: ./reports/
           retention-days: 30
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && always() && hashFiles('./reports/vuln-results.md') != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('./reports/vuln-results.md', 'utf8');
+            
+            // Only comment if there are critical or high findings
+            if (!report.includes('[CRITICAL]') && !report.includes('[HIGH]')) {
+              return;
+            }
+
+            const body = `### NullBunny Web Vulnerability Scan Results 🐰\n\n<details>\n<summary>View detailed findings</summary>\n\n${report}\n</details>`;
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
