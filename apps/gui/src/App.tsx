@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Activity, LayoutDashboard, ListTodo, Shield, Settings as SettingsIcon, Package } from 'lucide-react';
-import Dashboard from './pages/Dashboard';
-import Tasks from './pages/Tasks';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Tasks = lazy(() => import('./pages/Tasks'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -44,15 +45,27 @@ function App() {
   return (
     <BrowserRouter>
       <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/tasks/*" element={<Tasks />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/marketplace" element={<div>Marketplace (Coming Soon)</div>} />
-        </Routes>
+        <Suspense fallback={<RouteLoadingState />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/tasks/*" element={<Tasks />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/marketplace" element={<div>Marketplace (Coming Soon)</div>} />
+          </Routes>
+        </Suspense>
       </Layout>
     </BrowserRouter>
+  );
+}
+
+function RouteLoadingState() {
+  return (
+    <div className="flex min-h-full items-center justify-center">
+      <div className="glass rounded-xl border border-border px-6 py-4 text-sm uppercase tracking-[0.3em] text-textMuted">
+        Loading module...
+      </div>
+    </div>
   );
 }
 
