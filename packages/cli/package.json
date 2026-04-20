@@ -16,8 +16,10 @@
     "nullbunny": "dist/index.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nullbunny/action-app": "workspace:*",
     "@nullbunny/core": "workspace:*",
+    "@nullbunny/mcp-server": "workspace:*",
     "@nullbunny/providers": "workspace:*",
     "@nullbunny/recon": "workspace:*",
     "@nullbunny/reporters": "workspace:*",

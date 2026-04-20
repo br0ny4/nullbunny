@@ -601,7 +601,7 @@ export async function runWebVulnScanFromEndpoints(
 
 type VulnPayload = {
   value: string;
-  injectionPoint: "query" | "body" | "header" | "xml-body" | "cookie";
+  injectionPoint: "query" | "body" | "header" | "xml-body" | "cookie" | "path-param" | "json-id";
   fileName?: string;
   fileContent?: string;
 };
@@ -761,6 +761,14 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: 'O:8:"stdClass":1:{s:3:"cmd";s:12:"cat /etc/passwd";}', injectionPoint: "body" },
       { value: '{"__class__":"java.lang.Runtime","method":"exec","args":["cat /etc/passwd"]}', injectionPoint: "body" },
       { value: '<java><object class="java.lang.ProcessBuilder"><array class="java.lang.String" length="2"><void index="0"><string>cat</string></void><void index="1"><string>/etc/passwd</string></void></array><void method="start"/></object></java>', injectionPoint: "xml-body" },
+    ],
+    idor: [
+      { value: "00000000-0000-0000-0000-000000000000", injectionPoint: "path-param" },
+      { value: "1", injectionPoint: "path-param" },
+      { value: "999999999", injectionPoint: "path-param" },
+      { value: "00000000-0000-0000-0000-000000000000", injectionPoint: "json-id" },
+      { value: "1", injectionPoint: "json-id" },
+      { value: "999999999", injectionPoint: "json-id" },
     ],
   };
 
@@ -1005,6 +1013,59 @@ function injectPayload(endpoint: HarEndpoint, payload: VulnPayload, vulnType: st
     }
   }
 
+  if (payload.injectionPoint === "path-param") {
+    try {
+      const urlObj = new URL(endpoint.url);
+      const segments = urlObj.pathname.split("/");
+      let replaced = false;
+      for (let i = segments.length - 1; i >= 0; i--) {
+        const seg = segments[i];
+        if (/^\d+$/.test(seg) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)) {
+          segments[i] = payload.value;
+          replaced = true;
+          break;
+        }
+      }
+      if (replaced) {
+        urlObj.pathname = segments.join("/");
+        requests.push({
+          method: endpoint.method,
+          url: urlObj.toString(),
+          headers,
+          body: endpoint.postData?.text,
+        });
+      }
+    } catch {}
+    return requests;
+  }
+
+  if (payload.injectionPoint === "json-id" && endpoint.postData?.text) {
+    try {
+      const parsed = JSON.parse(endpoint.postData.text) as Record<string, unknown>;
+      let replaced = false;
+      const traverse = (obj: Record<string, unknown>) => {
+        for (const [k, v] of Object.entries(obj)) {
+          if (k.toLowerCase().endsWith("id") && (typeof v === "number" || typeof v === "string")) {
+            obj[k] = typeof v === "number" ? Number(payload.value) || 99999 : payload.value;
+            replaced = true;
+          } else if (v && typeof v === "object" && !Array.isArray(v)) {
+            traverse(v as Record<string, unknown>);
+          }
+        }
+      };
+      traverse(parsed);
+      if (replaced) {
+        requests.push({
+          method: endpoint.method,
+          url: endpoint.url,
+          headers,
+          body: JSON.stringify(parsed),
+        });
+      }
+    } catch {}
+    return requests;
+  }
+
   return requests.length > 0 ? requests : [{
     method: endpoint.method,
     url: endpoint.url,
@@ -1096,7 +1157,39 @@ function detectVulnerability(vulnType: string, payload: VulnPayload, response: V
   if (vulnType === "deserialization") {
     return detectDeserialization(payload, response, baseline);
   }
+  if (vulnType === "idor") {
+    return detectIdor(payload, response, baseline);
+  }
+
   return { detected: false, severity: "info", evidence: "", confirmed: false };
+}
+
+function detectIdor(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {
+  if (baseline.status !== 200 && baseline.status !== 201) {
+    return { detected: false, severity: "info", evidence: "", confirmed: false };
+  }
+  
+  if (response.status !== 200 && response.status !== 201) {
+    return { detected: false, severity: "info", evidence: "", confirmed: false };
+  }
+  
+  if (response.body === baseline.body) {
+    return { detected: false, severity: "info", evidence: "", confirmed: false };
+  }
+
+  const lengthDiff = Math.abs(response.body.length - baseline.bodyLength);
+  const similarity = lengthDiff / (baseline.bodyLength || 1);
+
+  if (similarity > 0.5) {
+    return { detected: false, severity: "info", evidence: "", confirmed: false };
+  }
+
+  return {
+    detected: true,
+    severity: "high",
+    evidence: `Response status ${response.status} with similar structure but different content after replacing ID with ${payload.value}`,
+    confirmed: false,
+  };
 }
 
 function detectXxe(payload: VulnPayload, response: VulnProbeResponse, baseline: BaselineResponse): DetectionResult {

@@ -49,6 +49,12 @@ export async function runCli(
 ): Promise<CliResult> {
   const [group, command, ...rest] = argv;
 
+  if (group === "mcp" && command === "start") {
+    const { startMcpServer } = await import("@nullbunny/mcp-server");
+    await startMcpServer();
+    return { exitCode: 0, output: "MCP server running" };
+  }
+
   if (group === "providers" && command === "test") {
     const flags = parseFlags(rest);
     const config = buildProviderConfig(flags);
@@ -493,6 +499,7 @@ function helpText(): string {
     "  nullbunny <group> <command> [flags]",
     "",
     "Groups:",
+    "  mcp         Start MCP Server",
     "  providers   Manage and test LLM providers",
     "  scan        Run LLM security scans",
     "  action      Run as GitHub Action",
@@ -500,6 +507,7 @@ function helpText(): string {
     "  recon       Run Infrastructure Reconnaissance",
     "",
     "Commands:",
+    "  mcp start        Start the NullBunny MCP Server on stdio",
     "  providers test   Test provider connectivity and model availability",
     "  scan run         Execute an LLM security scan",
     "  action run       Execute GitHub Action workflow",
@@ -567,6 +575,7 @@ function helpText(): string {
     "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
     "",
     "Examples:",
+    "  node packages/cli/dist/index.js mcp start",
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
     "  node packages/cli/dist/index.js providers test --provider gemini --model gemini-2.0-flash",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
