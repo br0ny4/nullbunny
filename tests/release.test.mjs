@@ -40,3 +40,24 @@ test("runCli returns help output without arguments", async () => {
     console.log = originalLog;
   }
 });
+
+test("runCli lists supported providers", async () => {
+  const outputLines = [];
+  const originalLog = console.log;
+  console.log = (...args) => {
+    outputLines.push(args.join(" "));
+  };
+
+  try {
+    const result = await runCli(["providers", "list"]);
+    assert.equal(result.exitCode, 0);
+    assert.match(result.output, /Supported providers/);
+    assert.match(result.output, /ollama/);
+    assert.match(result.output, /openai-compatible/);
+    assert.match(result.output, /cohere/);
+    assert.match(result.output, /defaultBaseUrl:/);
+    assert.equal(outputLines.length, 1);
+  } finally {
+    console.log = originalLog;
+  }
+});

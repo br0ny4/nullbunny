@@ -28,7 +28,9 @@ import { renderReport, type ReportFormat } from "@nullbunny/reporters";
 import {
   createProvider,
   formatHealthCheck,
+  listSupportedProviders,
   type ProviderConfig,
+  type ProviderType,
 } from "@nullbunny/providers";
 import { runReconScan } from "@nullbunny/recon";
 
@@ -68,6 +70,12 @@ export async function runCli(
 
     console.error(output);
     return { exitCode: 1, output };
+  }
+
+  if (group === "providers" && command === "list") {
+    const output = formatProviderCatalog();
+    console.log(output);
+    return { exitCode: 0, output };
   }
 
   if (group === "scan" && command === "run") {
@@ -376,7 +384,7 @@ export async function runCli(
 function buildProviderConfig(
   flags: Record<string, string | boolean>,
 ): ProviderConfig {
-  const provider = readRequiredFlag(flags, "provider");
+  const provider = readRequiredFlag(flags, "provider") as ProviderType;
   const model = readStringFlag(flags, "model");
   const timeoutValue = readStringFlag(flags, "timeout-ms");
   const timeoutMs = timeoutValue ? Number.parseInt(timeoutValue, 10) : undefined;
@@ -451,28 +459,22 @@ function buildProviderConfig(
     };
   }
 
-  const standardProviders: Record<string, { defaultBase: string, envKey: string }> = {
-    "siliconflow": { defaultBase: "https://api.siliconflow.cn/v1", envKey: "SILICONFLOW_API_KEY" },
-    "groq": { defaultBase: "https://api.groq.com/openai/v1", envKey: "GROQ_API_KEY" },
-    "together": { defaultBase: "https://api.together.xyz/v1", envKey: "TOGETHER_API_KEY" },
-    "mistral": { defaultBase: "https://api.mistral.ai/v1", envKey: "MISTRAL_API_KEY" },
-    "openrouter": { defaultBase: "https://openrouter.ai/api/v1", envKey: "OPENROUTER_API_KEY" },
-    "alibaba": { defaultBase: "https://dashscope.aliyuncs.com/compatible-mode/v1", envKey: "ALIBABA_API_KEY" },
-    "volcengine": { defaultBase: "https://ark.cn-beijing.volces.com/api/v3", envKey: "VOLCENGINE_API_KEY" },
-    "tencent": { defaultBase: "https://api.hunyuan.cloud.tencent.com/v1", envKey: "TENCENT_API_KEY" },
-    "perplexity": { defaultBase: "https://api.perplexity.ai", envKey: "PERPLEXITY_API_KEY" },
-    "xai": { defaultBase: "https://api.x.ai/v1", envKey: "XAI_API_KEY" },
-    "cohere": { defaultBase: "https://api.cohere.com/v1", envKey: "COHERE_API_KEY" }
-  };
+  const standardProviders = new Map(
+    listSupportedProviders()
+      .filter((entry) => !["ollama", "openai-compatible", "anthropic", "deepseek", "gemini", "azure-openai"].includes(entry.type))
+      .map((entry) => [entry.type, entry] as const),
+  );
 
-  if (provider in standardProviders) {
-    const pInfo = standardProviders[provider];
+  if (standardProviders.has(provider)) {
+    const pInfo = standardProviders.get(provider)!;
     return {
       id: readStringFlag(flags, "id") ?? provider,
-      type: provider as any,
-      baseUrl: readStringFlag(flags, "base-url") ?? pInfo.defaultBase,
+      type: provider,
+      baseUrl: readStringFlag(flags, "base-url") ?? pInfo.defaultBaseUrl,
       model,
-      apiKey: readStringFlag(flags, "api-key") ?? process.env[pInfo.envKey],
+      apiKey: pInfo.apiKeyEnv
+        ? readStringFlag(flags, "api-key") ?? process.env[pInfo.apiKeyEnv]
+        : readStringFlag(flags, "api-key"),
       timeoutMs,
     };
   }
@@ -544,6 +546,7 @@ async function writeReportFile(filePath: string, content: string): Promise<void>
 }
 
 function helpText(): string {
+  const providerTypes = listSupportedProviders().map((entry) => entry.type).join(", ");
   return [
     "NullBunny CLI",
     "",
@@ -560,6 +563,7 @@ function helpText(): string {
     "",
     "Commands:",
     "  mcp start        Start the NullBunny MCP Server on stdio",
+    "  providers list   List supported providers and default endpoints",
     "  providers test   Test provider connectivity and model availability",
     "  scan run         Execute an LLM security scan",
     "  action run       Execute GitHub Action workflow",
@@ -572,7 +576,7 @@ function helpText(): string {
     "  recon scan       Execute port scanning, subdomain enumeration and banner grabbing",
     "",
     "Flags (providers test):",
-    "  --provider <name>        Provider type (ollama, openai-compatible, anthropic, deepseek, gemini, azure-openai)",
+    `  --provider <name>        Provider type (${providerTypes})`,
     "  --model <name>           Model identifier to test",
     "  --base-url <url>         Provider API base URL (required for azure-openai)",
     "  --api-key <key>          Provider API key",
@@ -630,6 +634,7 @@ function helpText(): string {
     "Examples:",
     "  node packages/cli/dist/index.js web gui",
     "  node packages/cli/dist/index.js mcp start",
+    "  node packages/cli/dist/index.js providers list",
     "  node packages/cli/dist/index.js providers test --provider ollama --model qwen2.5:7b",
     "  node packages/cli/dist/index.js providers test --provider gemini --model gemini-2.0-flash",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
@@ -648,6 +653,18 @@ function helpText(): string {
     "  node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json",
     "  node packages/cli/dist/index.js web vuln-scan --crawl-url https://example.com --vulns xxe,xss,sqli --output ./reports/vuln-scan.json",
   ].join("\n");
+}
+
+function formatProviderCatalog(): string {
+  const lines = ["Supported providers:", ""];
+
+  for (const provider of listSupportedProviders()) {
+    lines.push(
+      `- ${provider.type} | defaultBaseUrl: ${provider.defaultBaseUrl}${provider.apiKeyEnv ? ` | apiKeyEnv: ${provider.apiKeyEnv}` : ""}`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 async function countNewFlagged(

@@ -17,6 +17,128 @@ export type ProviderType =
   | "xai"
   | "cohere";
 
+export interface ProviderCatalogEntry {
+  type: ProviderType;
+  defaultBaseUrl: string;
+  apiKeyEnv?: string;
+  healthcheckMode:
+    | "ollama"
+    | "anthropic"
+    | "deepseek"
+    | "gemini"
+    | "azure-openai"
+    | "cohere"
+    | "openai-compatible";
+}
+
+export const PROVIDER_CATALOG: Record<ProviderType, ProviderCatalogEntry> = {
+  "ollama": {
+    type: "ollama",
+    defaultBaseUrl: "http://127.0.0.1:11434",
+    healthcheckMode: "ollama",
+  },
+  "openai-compatible": {
+    type: "openai-compatible",
+    defaultBaseUrl: "http://127.0.0.1:8000/v1",
+    apiKeyEnv: "OPENAI_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "anthropic": {
+    type: "anthropic",
+    defaultBaseUrl: "https://api.anthropic.com",
+    apiKeyEnv: "ANTHROPIC_API_KEY",
+    healthcheckMode: "anthropic",
+  },
+  "deepseek": {
+    type: "deepseek",
+    defaultBaseUrl: "https://api.deepseek.com",
+    apiKeyEnv: "DEEPSEEK_API_KEY",
+    healthcheckMode: "deepseek",
+  },
+  "gemini": {
+    type: "gemini",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    apiKeyEnv: "GEMINI_API_KEY",
+    healthcheckMode: "gemini",
+  },
+  "azure-openai": {
+    type: "azure-openai",
+    defaultBaseUrl: "https://{resource}.openai.azure.com",
+    apiKeyEnv: "AZURE_OPENAI_API_KEY",
+    healthcheckMode: "azure-openai",
+  },
+  "siliconflow": {
+    type: "siliconflow",
+    defaultBaseUrl: "https://api.siliconflow.cn/v1",
+    apiKeyEnv: "SILICONFLOW_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "groq": {
+    type: "groq",
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+    apiKeyEnv: "GROQ_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "together": {
+    type: "together",
+    defaultBaseUrl: "https://api.together.xyz/v1",
+    apiKeyEnv: "TOGETHER_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "mistral": {
+    type: "mistral",
+    defaultBaseUrl: "https://api.mistral.ai/v1",
+    apiKeyEnv: "MISTRAL_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "openrouter": {
+    type: "openrouter",
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+    apiKeyEnv: "OPENROUTER_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "alibaba": {
+    type: "alibaba",
+    defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    apiKeyEnv: "ALIBABA_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "volcengine": {
+    type: "volcengine",
+    defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    apiKeyEnv: "VOLCENGINE_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "tencent": {
+    type: "tencent",
+    defaultBaseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    apiKeyEnv: "TENCENT_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "perplexity": {
+    type: "perplexity",
+    defaultBaseUrl: "https://api.perplexity.ai",
+    apiKeyEnv: "PERPLEXITY_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "xai": {
+    type: "xai",
+    defaultBaseUrl: "https://api.x.ai/v1",
+    apiKeyEnv: "XAI_API_KEY",
+    healthcheckMode: "openai-compatible",
+  },
+  "cohere": {
+    type: "cohere",
+    defaultBaseUrl: "https://api.cohere.com/v1",
+    apiKeyEnv: "COHERE_API_KEY",
+    healthcheckMode: "cohere",
+  },
+};
+
+export function listSupportedProviders(): ProviderCatalogEntry[] {
+  return Object.values(PROVIDER_CATALOG);
+}
+
 export interface ProviderConfig {
   id: string;
   type: ProviderType;
@@ -67,33 +189,34 @@ export function createProvider(config: ProviderConfig): ModelProvider {
     config: normalized,
     async healthCheck() {
       const startedAt = Date.now();
+      const providerMeta = PROVIDER_CATALOG[normalized.type];
       let url = `${normalized.baseUrl}/models`;
       const headers: Record<string, string> = {};
 
-      if (normalized.type === "ollama") {
+      if (providerMeta.healthcheckMode === "ollama") {
         url = `${normalized.baseUrl}/api/tags`;
-      } else if (normalized.type === "anthropic") {
+      } else if (providerMeta.healthcheckMode === "anthropic") {
         url = `${normalized.baseUrl}/v1/models`;
         if (normalized.apiKey) {
           headers["x-api-key"] = normalized.apiKey;
         }
         headers["anthropic-version"] = "2023-06-01";
-      } else if (normalized.type === "deepseek") {
+      } else if (providerMeta.healthcheckMode === "deepseek") {
         url = `${normalized.baseUrl}/v1/models`;
         if (normalized.apiKey) {
           headers.authorization = `Bearer ${normalized.apiKey}`;
         }
-      } else if (normalized.type === "gemini") {
+      } else if (providerMeta.healthcheckMode === "gemini") {
         url = `${normalized.baseUrl}/v1beta/models`;
         if (normalized.apiKey) {
           headers["x-goog-api-key"] = normalized.apiKey;
         }
-      } else if (normalized.type === "azure-openai") {
+      } else if (providerMeta.healthcheckMode === "azure-openai") {
         url = `${normalized.baseUrl}/models?api-version=2024-02-01`;
         if (normalized.apiKey) {
           headers["api-key"] = normalized.apiKey;
         }
-      } else if (normalized.type === "cohere") {
+      } else if (providerMeta.healthcheckMode === "cohere") {
         url = `${normalized.baseUrl}/models`;
         if (normalized.apiKey) {
           headers.authorization = `Bearer ${normalized.apiKey}`;
@@ -111,17 +234,17 @@ export function createProvider(config: ProviderConfig): ModelProvider {
           headers,
         );
         const models =
-          normalized.type === "ollama"
+          providerMeta.healthcheckMode === "ollama"
             ? readOllamaModels(body)
-            : normalized.type === "anthropic"
+            : providerMeta.healthcheckMode === "anthropic"
               ? readAnthropicModels(body)
-              : normalized.type === "deepseek"
+              : providerMeta.healthcheckMode === "deepseek"
                 ? readDeepSeekModels(body)
-                : normalized.type === "gemini"
+                : providerMeta.healthcheckMode === "gemini"
                   ? readGeminiModels(body)
-                  : normalized.type === "azure-openai"
+                  : providerMeta.healthcheckMode === "azure-openai"
                     ? readAzureOpenAIModels(body)
-                    : normalized.type === "cohere"
+                    : providerMeta.healthcheckMode === "cohere"
                       ? readCohereModels(body)
                       : readOpenAICompatibleModels(body);
 
