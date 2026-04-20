@@ -87,7 +87,7 @@ NullBunny 致力于打造一个"开箱即用"且"适配企业 CI"的综合性红
   - [x] 反序列化漏洞检测
 - **进阶 Web 渗透**
   - [ ] 支持抓取 Chrome DevTools / mitmproxy 导出的第三方 HAR
-  - [ ] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
+  - [x] Web 漏洞扫描支持更多注入点（Cookie、自定义 Header）
   - [x] Web 漏洞扫描支持爬虫模式（自动发现端点）
   - [ ] 认证绕过 / 权限提升自动化检测
 - **基础设施安全**

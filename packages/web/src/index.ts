@@ -601,7 +601,7 @@ export async function runWebVulnScanFromEndpoints(
 
 type VulnPayload = {
   value: string;
-  injectionPoint: "query" | "body" | "header" | "xml-body";
+  injectionPoint: "query" | "body" | "header" | "xml-body" | "cookie";
   fileName?: string;
   fileContent?: string;
 };
@@ -696,6 +696,8 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "<body onload=alert(1)>", injectionPoint: "query" },
       { value: "%3Cscript%3Ealert(1)%3C/script%3E", injectionPoint: "query" },
       { value: "${alert(1)}", injectionPoint: "query" },
+      { value: "<script>alert('XSS-Header')</script>", injectionPoint: "header" },
+      { value: "<script>alert('XSS-Cookie')</script>", injectionPoint: "cookie" },
     ],
     sqli: [
       { value: "' OR '1'='1", injectionPoint: "query" },
@@ -703,6 +705,8 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "' AND 1=CONVERT(int,(SELECT @@version))--", injectionPoint: "query" },
       { value: "' WAITFOR DELAY '0:0:5'--", injectionPoint: "query" },
       { value: "' AND 1=1--", injectionPoint: "query" },
+      { value: "' OR '1'='1", injectionPoint: "header" },
+      { value: "' OR '1'='1", injectionPoint: "cookie" },
     ],
     ssrf: [
       { value: "http://127.0.0.1/admin", injectionPoint: "query" },
@@ -710,6 +714,8 @@ function getPayloadsForVulnType(vulnType: string): VulnPayload[] {
       { value: "http://metadata.google.internal/computeMetadata/v1/", injectionPoint: "query" },
       { value: "http://0.0.0.0/", injectionPoint: "query" },
       { value: "http://localtest.me/", injectionPoint: "query" },
+      { value: "http://127.0.0.1/admin", injectionPoint: "header" },
+      { value: "http://127.0.0.1/admin", injectionPoint: "cookie" },
     ],
     "path-traversal": [
       { value: "../../../etc/passwd", injectionPoint: "query" },
@@ -822,13 +828,55 @@ function injectPayload(endpoint: HarEndpoint, payload: VulnPayload, vulnType: st
   }
 
   if (payload.injectionPoint === "header") {
-    const injectedHeaders = { ...headers, "x-forwarded-for": payload.value };
-    requests.push({
-      method: endpoint.method,
-      url: endpoint.url,
-      headers: injectedHeaders,
-      body: endpoint.postData?.text,
-    });
+    const targetHeaders = ["x-forwarded-for", "user-agent", "referer", "host", "x-api-version"];
+    for (const target of targetHeaders) {
+      requests.push({
+        method: endpoint.method,
+        url: endpoint.url,
+        headers: { ...headers, [target]: payload.value },
+        body: endpoint.postData?.text,
+      });
+    }
+
+    for (const key of Object.keys(headers)) {
+      if (key !== "cookie" && key !== "content-type" && key !== "content-length") {
+        requests.push({
+          method: endpoint.method,
+          url: endpoint.url,
+          headers: { ...headers, [key]: payload.value },
+          body: endpoint.postData?.text,
+        });
+      }
+    }
+    return requests;
+  }
+
+  if (payload.injectionPoint === "cookie") {
+    const cookieStr = headers["cookie"] || "";
+    if (cookieStr) {
+      const cookies = cookieStr.split(";").map((c) => c.trim());
+      for (let i = 0; i < cookies.length; i++) {
+        const parts = cookies[i].split("=");
+        const key = parts[0];
+        if (key) {
+          const newCookies = [...cookies];
+          newCookies[i] = `${key}=${payload.value}`;
+          requests.push({
+            method: endpoint.method,
+            url: endpoint.url,
+            headers: { ...headers, cookie: newCookies.join("; ") },
+            body: endpoint.postData?.text,
+          });
+        }
+      }
+    } else {
+      requests.push({
+        method: endpoint.method,
+        url: endpoint.url,
+        headers: { ...headers, cookie: `session_id=${payload.value}` },
+        body: endpoint.postData?.text,
+      });
+    }
     return requests;
   }
 
@@ -1097,8 +1145,8 @@ function detectSqli(payload: VulnPayload, response: VulnProbeResponse, baseline:
     /nativeclient.*microsoft.*sql/i,
     /odbc sql server driver/i,
     /sqlserver.*jdbc/i,
-    /oracle.*driver/i,
-    /ora-\d{5}/i,
+    /(?:oracle.*driver.*error|error.*oracle.*driver)/i,
+    /ora-\d{5}(?!\s*<)/i,
     /quoted string not properly terminated/i,
     /sql command not properly ended/i,
     /microsoft access driver/i,
@@ -1107,16 +1155,24 @@ function detectSqli(payload: VulnPayload, response: VulnProbeResponse, baseline:
     /sqlite3::/i,
   ];
 
-  for (const pattern of sqlErrorPatterns) {
-    const match = pattern.exec(response.body);
-    if (match) {
-      return {
-        detected: true,
-        severity: "critical",
-        evidence: `SQL error message detected: ${match[0]}`,
-        confirmed: true,
-      };
+  const isPhpInfo = response.body.includes("<title>phpinfo()</title>") || response.body.includes("<h1>PHP Credits</h1>");
+
+  if (!isPhpInfo) {
+    for (const pattern of sqlErrorPatterns) {
+      const match = pattern.exec(response.body);
+      if (match) {
+        return {
+          detected: true,
+          severity: "critical",
+          evidence: `SQL error message detected: ${match[0]}`,
+          confirmed: true,
+        };
+      }
     }
+  }
+
+  if (baseline.status === 200 && response.status >= 400 && response.status < 500) {
+    return { detected: false, severity: "info", evidence: "", confirmed: false };
   }
 
   if (baseline.status > 0 && response.status !== baseline.status) {
