@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink as RouterNavLink } from 'react-router-dom';
 import { Activity, LayoutDashboard, ListTodo, Shield, Settings as SettingsIcon, Package } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -17,13 +17,13 @@ function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="text-xl font-bold tracking-tight">NullBunny</h1>
         </div>
         <nav className="flex-1 px-4 py-6 space-y-2">
-          <NavLink to="/" icon={<LayoutDashboard />} label="仪表盘" />
-          <NavLink to="/tasks" icon={<ListTodo />} label="任务中心" />
-          <NavLink to="/reports" icon={<Activity />} label="报告中心" />
-          <NavLink to="/marketplace" icon={<Package />} label="扩展市场" />
+          <SidebarNavLink to="/" icon={<LayoutDashboard />} label="仪表盘" end />
+          <SidebarNavLink to="/tasks" icon={<ListTodo />} label="任务中心" />
+          <SidebarNavLink to="/reports" icon={<Activity />} label="报告中心" />
+          <SidebarNavLink to="/marketplace" icon={<Package />} label="扩展市场" />
         </nav>
         <div className="p-4 border-t border-border">
-          <NavLink to="/settings" icon={<SettingsIcon />} label="系统设置" />
+          <SidebarNavLink to="/settings" icon={<SettingsIcon />} label="系统设置" />
         </div>
       </aside>
       <main className="flex-1 overflow-auto p-8">
@@ -33,12 +33,22 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavLink({ to, icon, label }: { to: string, icon: React.ReactNode, label: string }) {
+function SidebarNavLink({ to, icon, label, end = false }: { to: string, icon: React.ReactNode, label: string, end?: boolean }) {
   return (
-    <Link to={to} className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surfaceHover transition-colors text-textMuted hover:text-text">
+    <RouterNavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+          isActive
+            ? 'bg-surfaceHover text-text border border-border'
+            : 'text-textMuted hover:bg-surfaceHover hover:text-text'
+        }`
+      }
+    >
       {React.cloneElement(icon as React.ReactElement, { className: 'w-5 h-5' })}
       <span className="font-medium">{label}</span>
-    </Link>
+    </RouterNavLink>
   );
 }
 

@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, Cpu, HardDrive, ShieldAlert } from 'lucide-react';
+
+const DashboardPerformanceChart = React.lazy(() => import('./DashboardPerformanceChart'));
+
+type HistoryPoint = {
+  time: string;
+  cpu: number;
+  memory: number;
+};
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -10,7 +17,7 @@ export default function Dashboard() {
     vulns: 0
   });
 
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -57,16 +64,9 @@ export default function Dashboard() {
         <div className="glass p-6 rounded-xl border border-border">
           <h3 className="text-xl font-semibold mb-6">性能趋势 (Performance)</h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={history}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="time" stroke="#888" fontSize={12} />
-                <YAxis stroke="#888" fontSize={12} />
-                <Tooltip contentStyle={{ backgroundColor: '#121212', borderColor: '#333' }} />
-                <Line type="monotone" dataKey="cpu" stroke="#00FF00" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="memory" stroke="#B026FF" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <React.Suspense fallback={<div className="text-sm text-textMuted">加载图表中...</div>}>
+              <DashboardPerformanceChart history={history} />
+            </React.Suspense>
           </div>
         </div>
         
