@@ -115,6 +115,15 @@ node packages/cli/dist/index.js web gui
 
 启动后即可在浏览器中访问：**[http://localhost:3001](http://localhost:3001)** 体验可视化的渗透测试流程！
 
+GUI 运行时会在本地创建与维护这些目录/文件（便于排障与归档）：
+- 任务与日志：`.data/gui/tasks.json`
+- GUI 设置（含 Marketplace 启用的 manifest 列表）：`.data/gui/settings.json`
+- 报告目录（Reports 页面会从这里读取并支持查看/下载）：`./reports`
+
+GUI 的实时更新通过 WebSocket 通道实现：
+- WebSocket：`ws://localhost:3001/ws`（浏览器侧会自动连）
+- 兼容事件流：`GET /api/tasks/:id/events`（SSE）
+
 ### 💻 CLI 命令行使用
 
 **安装与构建：**
@@ -150,11 +159,18 @@ node packages/cli/dist/index.js providers test --provider alibaba --model qwen-m
 
 ```bash
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json
+node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --json-events true
 node packages/cli/dist/index.js scan run --config ./examples/basic-openai-compatible/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/basic-anthropic/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/basic-deepseek/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.json
 node packages/cli/dist/index.js scan run --config ./examples/rag-ollama/scan.json
+```
+
+`--json-events true` 会把结构化事件按单行输出打印出来（前缀为 `NB_EVENT`），可用于 GUI / CI / 其他 Agent 消费进度与结果：
+
+```bash
+node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --json-events true | grep '^NB_EVENT '
 ```
 
 运行资产发现（子域名枚举、端口扫描与中间件探测）：
@@ -167,6 +183,7 @@ node packages/cli/dist/index.js recon scan \
   --wordlist www,api,admin \
   --banner true \
   --detect-middleware true \
+  --json-events true \
   --output ./reports/recon.json
 ```
 
@@ -176,6 +193,7 @@ node packages/cli/dist/index.js recon scan \
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --output ./reports/vuln-scan.json
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format markdown --output ./reports/vuln-scan.md
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json
+node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --json-events true --output ./reports/vuln-scan.json
 ```
 
 写出报告：
@@ -251,6 +269,20 @@ jobs:
 }
 ```
 
+### Marketplace（GUI 扩展市场）
+
+Web GUI 内置 Marketplace 页面，会扫描本地 manifest 并提供启用/禁用开关：
+- 默认扫描目录：`examples/extensions`
+- 可追加扫描目录：在 `.data/gui/settings.json` 中配置 `pluginDirs: string[]`
+- 启用的 manifest 列表：`.data/gui/settings.json` 中 `enabledManifests: string[]`
+
+当你在 GUI 中发起 LLM 扫描任务时，GUI server 会把 `enabledManifests` 自动注入到运行时 config 的 `bridge.manifestPaths`（写入临时 config 后执行 CLI），从而做到“在市场启用插件 → 下一次扫描立即生效”。
+
+Marketplace 后端 API：
+- `GET /api/plugins`
+- `POST /api/plugins/enable` body: `{ "path": "<manifestPath>" }`
+- `POST /api/plugins/disable` body: `{ "path": "<manifestPath>" }`
+
 示例外部 manifest：见 [community-pack.json](examples/extensions/community-pack.json)。
 
 内置 OWASP LLM Top 10 starter pack：见 [owasp-llm-top10-pack.json](examples/extensions/owasp-llm-top10-pack.json) 与示例扫描配置 [scan.json](examples/owasp-ollama/scan.json)。
@@ -308,7 +340,7 @@ node packages/cli/dist/index.js web crawl --url https://example.com --max-depth 
 - `--url`：起始 URL（必填）
 - `--max-depth`：最大爬取深度，默认 2
 - `--max-pages`：最大爬取页面数，默认 20
-- `--same-origin`：是否仅爬取同源链接，默认 true（设为 false 可跨域）
+- `--same-origin`：是否仅爬取同源链接，默认 true（设为 false 可跨域），取值 true/false
 - `--timeout-ms`：页面加载超时时间
 - `--output`：输出文件路径
 
