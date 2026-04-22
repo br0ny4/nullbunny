@@ -6,6 +6,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -51,7 +52,7 @@ function App() {
             <Route path="/tasks/*" element={<Tasks />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/marketplace" element={<div>Marketplace (Coming Soon)</div>} />
+            <Route path="/marketplace" element={<Marketplace />} />
           </Routes>
         </Suspense>
       </Layout>

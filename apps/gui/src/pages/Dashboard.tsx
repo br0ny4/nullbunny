@@ -20,12 +20,16 @@ export default function Dashboard() {
         
         setStats(prev => ({
           ...prev,
-          cpu: data.cpuUsage || Math.random() * 20,
-          memory: (data.memoryUsage?.heapUsed / 1024 / 1024) || Math.random() * 500,
+          cpu: typeof data.cpuUsage === 'number' ? data.cpuUsage : prev.cpu,
+          memory: typeof data.memoryUsage?.heapUsed === 'number' ? (data.memoryUsage.heapUsed / 1024 / 1024) : prev.memory,
+          tasks: typeof data.activeTasks === 'number' ? data.activeTasks : prev.tasks,
         }));
 
         setHistory(prev => {
-          const newHistory = [...prev, { time: new Date().toLocaleTimeString(), cpu: data.cpuUsage, memory: (data.memoryUsage?.heapUsed / 1024 / 1024) }];
+          const last = prev[prev.length - 1];
+          const cpu = typeof data.cpuUsage === 'number' ? data.cpuUsage : last?.cpu ?? 0;
+          const memory = typeof data.memoryUsage?.heapUsed === 'number' ? (data.memoryUsage.heapUsed / 1024 / 1024) : last?.memory ?? 0;
+          const newHistory = [...prev, { time: new Date().toLocaleTimeString(), cpu, memory }];
           return newHistory.slice(-20);
         });
       } catch (err) {

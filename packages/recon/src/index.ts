@@ -39,6 +39,10 @@ export interface ReconScanConfig {
   };
 }
 
+export interface ReconScanOptions {
+  onEvent?: (event: any) => void;
+}
+
 export interface ReconScanResult {
   scanId: string;
   target: string;
@@ -64,7 +68,8 @@ export function buildSubdomainCandidates(domain: string, prefixes: string[]): st
     .map((prefix) => `${prefix}.${normalizedDomain}`);
 }
 
-export async function resolveHostnames(hostnames: string[]): Promise<HostResolution[]> {
+export async function resolveHostnames(hostnames: string[], onEvent?: (e: any) => void): Promise<HostResolution[]> {
+  let completed = 0;
   const results = await Promise.all(
     hostnames.map(async (hostname) => {
       try {
@@ -73,6 +78,12 @@ export async function resolveHostnames(hostnames: string[]): Promise<HostResolut
         return { hostname, addresses };
       } catch {
         return { hostname, addresses: [] };
+      } finally {
+        completed++;
+        onEvent?.({
+          type: "recon:subdomain-progress",
+          progress: { current: completed, total: hostnames.length },
+        });
       }
     }),
   );
@@ -80,13 +91,13 @@ export async function resolveHostnames(hostnames: string[]): Promise<HostResolut
   return results;
 }
 
-export async function runReconScan(config: ReconScanConfig): Promise<ReconScanResult> {
+export async function runReconScan(config: ReconScanConfig, options?: ReconScanOptions): Promise<ReconScanResult> {
   const ports = parsePortSpec(config.ports);
 
   let hosts = [...config.hosts];
   if (config.subdomains) {
     const candidates = buildSubdomainCandidates(config.subdomains.domain, config.subdomains.wordlist);
-    const resolved = await resolveHostnames(candidates);
+    const resolved = await resolveHostnames(candidates, options?.onEvent);
     const validHosts = resolved.filter((item) => item.addresses.length > 0).map((item) => item.hostname);
     hosts = Array.from(new Set([...hosts, ...validHosts]));
   }
@@ -95,6 +106,7 @@ export async function runReconScan(config: ReconScanConfig): Promise<ReconScanRe
   const results = await scanTcpPorts(targets, {
     timeoutMs: config.timeoutMs,
     grabBanner: config.grabBanner,
+    onEvent: options?.onEvent,
   });
   const open = results.filter((item) => item.open).length;
 
@@ -249,14 +261,23 @@ export async function detectMiddlewareConfigurations(
 
 export async function scanTcpPorts(
   targets: HostPort[],
-  options: TcpPortScanOptions = {},
+  options: TcpPortScanOptions & ReconScanOptions = {},
 ): Promise<TcpPortScanResult[]> {
   const timeoutMs = options.timeoutMs ?? 2000;
   const grabBanner = options.grabBanner ?? false;
 
+  let completed = 0;
   const results = await Promise.all(
     targets.map(async (target) => {
       const open = await isTcpPortOpen(target.host, target.port, timeoutMs, grabBanner);
+      completed++;
+      options.onEvent?.({
+        type: "recon:port-progress",
+        progress: { current: completed, total: targets.length },
+        host: target.host,
+        port: target.port,
+        open: open.open,
+      });
       return { ...target, ...open };
     }),
   );

@@ -82,8 +82,19 @@ export async function runCli(
     const flags = parseFlags(rest);
     const configPath = readRequiredFlag(flags, "config");
     const baselinePath = readStringFlag(flags, "baseline");
+    const jsonEvents =
+      flags["json-events"] === true || flags["json-events"] === "true";
     const config = await loadScanConfig(configPath);
-    const result = await runScan(config);
+    const result = await runScan(
+      config,
+      jsonEvents
+        ? {
+            onEvent(event) {
+              console.log(`NB_EVENT ${JSON.stringify(event)}`);
+            },
+          }
+        : undefined,
+    );
     const output = formatScanRun(result);
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
@@ -142,6 +153,9 @@ export async function runCli(
     const outputPath = readStringFlag(flags, "output");
     const reportFormat = readReportFormat(flags);
 
+    const jsonEvents = flags["json-events"] === true || flags["json-events"] === "true";
+    const onEvent = jsonEvents ? (event: any) => console.log(`NB_EVENT ${JSON.stringify(event)}`) : undefined;
+
     const hosts = hostsValue
       .split(",")
       .map((item) => item.trim())
@@ -164,7 +178,7 @@ export async function runCli(
       grabBanner,
       detectMiddleware,
       subdomains,
-    });
+    }, { onEvent });
 
     const output = JSON.stringify(result, null, 2);
 
@@ -281,6 +295,9 @@ export async function runCli(
     const crawlUrl = readStringFlag(flags, "crawl-url");
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
+    const jsonEvents = flags["json-events"] === true || flags["json-events"] === "true";
+
+    const onEvent = jsonEvents ? (event: any) => console.log(`NB_EVENT ${JSON.stringify(event)}`) : undefined;
 
     if (crawlUrl) {
       const vulnsValue = readStringFlag(flags, "vulns");
@@ -311,6 +328,7 @@ export async function runCli(
         harEndpoints,
         vulns,
         timeoutMs,
+        { onEvent }
       );
 
       const output = JSON.stringify(result, null, 2);
@@ -333,7 +351,7 @@ export async function runCli(
 
     const { loadWebVulnScanConfig, runWebVulnScan } = await import("@nullbunny/web");
     const config = await loadWebVulnScanConfig(configPath);
-    const result = await runWebVulnScan(config);
+    const result = await runWebVulnScan(config, { onEvent });
     const output = JSON.stringify(result, null, 2);
 
     if (outputPath) {

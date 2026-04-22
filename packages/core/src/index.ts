@@ -57,6 +57,16 @@ export interface ScanRunResult {
   cases: ScanCaseResult[];
 }
 
+export type ScanRunEvent =
+  | { type: "scan_start"; scanId: string; target: string; total: number }
+  | { type: "case_start"; scanId: string; index: number; total: number; caseId: string; category: string }
+  | { type: "case_end"; scanId: string; index: number; total: number; caseId: string; outcome: ScanOutcome; latencyMs: number }
+  | { type: "scan_end"; scanId: string; target: string; total: number; passed: number; flagged: number; errors: number };
+
+export interface RunScanOptions {
+  onEvent?: (event: ScanRunEvent) => void;
+}
+
 export async function loadScanConfig(filePath: string): Promise<ScanConfig> {
   const content = await readFile(filePath, "utf8");
   const interpolated = interpolateEnvVars(content);
@@ -68,7 +78,10 @@ export async function loadScanConfig(filePath: string): Promise<ScanConfig> {
   return normalizeScanConfigPaths(parsed, filePath);
 }
 
-export async function runScan(config: ScanConfig): Promise<ScanRunResult> {
+export async function runScan(
+  config: ScanConfig,
+  options?: RunScanOptions,
+): Promise<ScanRunResult> {
   const provider = createProvider(config.provider);
   const providerStatus = await provider.healthCheck();
 
@@ -82,6 +95,13 @@ export async function runScan(config: ScanConfig): Promise<ScanRunResult> {
     bridgeRegistry.judgeRegistry,
   );
   const attacks = resolveAttackEntries(config.attacks, attackRegistry);
+
+  options?.onEvent?.({
+    type: "scan_start",
+    scanId: config.id,
+    target: config.target,
+    total: attacks.length,
+  });
 
   if (!providerStatus.ok) {
     return {
@@ -109,7 +129,16 @@ export async function runScan(config: ScanConfig): Promise<ScanRunResult> {
   const judgeConfig = normalizeJudgeConfig(config.judge);
   const cases: ScanCaseResult[] = [];
 
-  for (const attack of attacks) {
+  for (const [index, attack] of attacks.entries()) {
+    options?.onEvent?.({
+      type: "case_start",
+      scanId: config.id,
+      index: index + 1,
+      total: attacks.length,
+      caseId: attack.id,
+      category: attack.category,
+    });
+
     const generation = await provider.generate(attack.prompt);
     const judged = judgeResponseWithRegistry(
       {
@@ -129,9 +158,19 @@ export async function runScan(config: ScanConfig): Promise<ScanRunResult> {
       reason: judged.reason,
       latencyMs: generation.latencyMs,
     });
+
+    options?.onEvent?.({
+      type: "case_end",
+      scanId: config.id,
+      index: index + 1,
+      total: attacks.length,
+      caseId: attack.id,
+      outcome: judged.outcome,
+      latencyMs: generation.latencyMs,
+    });
   }
 
-  return {
+  const result: ScanRunResult = {
     scanId: config.id,
     target: config.target,
     provider: providerStatus,
@@ -143,6 +182,18 @@ export async function runScan(config: ScanConfig): Promise<ScanRunResult> {
     },
     cases,
   };
+
+  options?.onEvent?.({
+    type: "scan_end",
+    scanId: result.scanId,
+    target: result.target,
+    total: result.summary.total,
+    passed: result.summary.passed,
+    flagged: result.summary.flagged,
+    errors: result.summary.errors,
+  });
+
+  return result;
 }
 
 export function formatScanRun(result: ScanRunResult): string {

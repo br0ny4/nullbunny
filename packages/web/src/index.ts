@@ -125,6 +125,10 @@ export interface WebVulnScanConfig {
   timeoutMs?: number;
 }
 
+export interface WebVulnScanOptions {
+  onEvent?: (event: any) => void;
+}
+
 export type WebVulnScanEntry = {
   type: string;
   enabled?: boolean;
@@ -489,18 +493,28 @@ export async function runWebScan(config: WebScanConfig): Promise<WebScanRunResul
   };
 }
 
-export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVulnScanResult> {
+export async function runWebVulnScan(config: WebVulnScanConfig, options?: WebVulnScanOptions): Promise<WebVulnScanResult> {
   const har = await readHar(config.harPath);
   const endpoints = extractHarEndpoints(har);
   const enabledVulns = config.vulns.filter((v) => v.enabled !== false);
   const findings: WebVulnFinding[] = [];
   const timeoutMs = config.timeoutMs ?? 10_000;
 
+  let completedCases = 0;
+  const totalCases = endpoints.length * enabledVulns.length; // rough estimate
+
   for (const endpoint of endpoints) {
     const baseline = await sendBaselineRequest(endpoint, timeoutMs);
 
     for (const vuln of enabledVulns) {
+      options?.onEvent?.({
+        type: "vuln-scan:case-start",
+        vuln: vuln.type,
+        endpoint: `${endpoint.method} ${endpoint.url}`,
+      });
+
       const payloads = getPayloadsForVulnType(vuln.type);
+      let detectedCount = 0;
 
       for (const payload of payloads) {
         const injectedRequests = injectPayload(endpoint, payload, vuln.type);
@@ -510,6 +524,7 @@ export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVuln
           const detection = detectVulnerability(vuln.type, payload, result, baseline);
 
           if (detection.detected) {
+            detectedCount++;
             findings.push({
               id: randomUUID(),
               vulnType: vuln.type,
@@ -524,6 +539,18 @@ export async function runWebVulnScan(config: WebVulnScanConfig): Promise<WebVuln
           }
         }
       }
+
+      completedCases++;
+      options?.onEvent?.({
+        type: "vuln-scan:case-end",
+        vuln: vuln.type,
+        endpoint: `${endpoint.method} ${endpoint.url}`,
+        detected: detectedCount > 0,
+        progress: {
+          current: completedCases,
+          total: totalCases,
+        },
+      });
     }
   }
 
@@ -548,16 +575,27 @@ export async function runWebVulnScanFromEndpoints(
   endpoints: HarEndpoint[],
   vulns: WebVulnScanEntry[],
   timeoutMs?: number,
+  options?: WebVulnScanOptions,
 ): Promise<WebVulnScanResult> {
   const enabledVulns = vulns.filter((v) => v.enabled !== false);
   const findings: WebVulnFinding[] = [];
   const effectiveTimeout = timeoutMs ?? 10_000;
 
+  let completedCases = 0;
+  const totalCases = endpoints.length * enabledVulns.length;
+
   for (const endpoint of endpoints) {
     const baseline = await sendBaselineRequest(endpoint, effectiveTimeout);
 
     for (const vuln of enabledVulns) {
+      options?.onEvent?.({
+        type: "vuln-scan:case-start",
+        vuln: vuln.type,
+        endpoint: `${endpoint.method} ${endpoint.url}`,
+      });
+
       const payloads = getPayloadsForVulnType(vuln.type);
+      let detectedCount = 0;
 
       for (const payload of payloads) {
         const injectedRequests = injectPayload(endpoint, payload, vuln.type);
@@ -567,6 +605,7 @@ export async function runWebVulnScanFromEndpoints(
           const detection = detectVulnerability(vuln.type, payload, result, baseline);
 
           if (detection.detected) {
+            detectedCount++;
             findings.push({
               id: randomUUID(),
               vulnType: vuln.type,
@@ -581,6 +620,18 @@ export async function runWebVulnScanFromEndpoints(
           }
         }
       }
+
+      completedCases++;
+      options?.onEvent?.({
+        type: "vuln-scan:case-end",
+        vuln: vuln.type,
+        endpoint: `${endpoint.method} ${endpoint.url}`,
+        detected: detectedCount > 0,
+        progress: {
+          current: completedCases,
+          total: totalCases,
+        },
+      });
     }
   }
 
