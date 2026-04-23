@@ -52,6 +52,29 @@ export interface NbEventV1 {
   };
 }
 
+const NB_EVENT_TYPE_MAP: Record<NbEventSource, Record<string, string>> = {
+  scan: {
+    scan_start: "scan.scan_start",
+    case_start: "scan.case_start",
+    case_end: "scan.case_end",
+    scan_end: "scan.scan_end",
+  },
+  recon: {
+    "recon:subdomain-progress": "recon.subdomain_progress",
+    subdomain_progress: "recon.subdomain_progress",
+    "recon:port-progress": "recon.port_progress",
+    port_progress: "recon.port_progress",
+  },
+  web: {
+    "vuln-scan:case-start": "web.case_start",
+    case_start: "web.case_start",
+    "vuln-scan:case-end": "web.case_end",
+    case_end: "web.case_end",
+    web_scan_start: "web.web_scan_start",
+    web_scan_end: "web.web_scan_end",
+  },
+};
+
 export function createCli() {
   return {
     name: "nullbunny",
@@ -619,15 +642,13 @@ function emitNbEvent(source: NbEventSource, rawEvent: unknown): void {
 }
 
 function normalizeEventType(source: NbEventSource, rawType: string): string {
-  const withoutSourcePrefix = rawType.startsWith(`${source}:`)
-    ? rawType.slice(source.length + 1)
-    : rawType;
-  const normalized = withoutSourcePrefix
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  const normalizedRawType = rawType.trim().toLowerCase();
+  const mapped = NB_EVENT_TYPE_MAP[source][normalizedRawType];
+  if (mapped) {
+    return mapped;
+  }
 
-  return `${source}.${normalized || "event"}`;
+  return `${source}.unknown`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

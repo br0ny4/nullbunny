@@ -35,9 +35,33 @@ test("toNbEventV1 normalizes recon and web event names", () => {
   });
 
   assert.equal(recon.eventType, "recon.port_progress");
-  assert.equal(web.eventType, "web.vuln_scan_case_end");
+  assert.equal(web.eventType, "web.case_end");
   assert.equal(recon.payload.type, "recon:port-progress");
   assert.equal(web.payload.type, "vuln-scan:case-end");
+});
+
+test("toNbEventV1 uses strict event type mapping and stable fallback", () => {
+  const snapshot = [
+    toNbEventV1("scan", { type: "scan_start" }).eventType,
+    toNbEventV1("scan", { type: "case_end" }).eventType,
+    toNbEventV1("recon", { type: "recon:port-progress" }).eventType,
+    toNbEventV1("recon", { type: "port_progress" }).eventType,
+    toNbEventV1("web", { type: "vuln-scan:case-start" }).eventType,
+    toNbEventV1("web", { type: "case_end" }).eventType,
+    toNbEventV1("web", { type: "web_scan_end" }).eventType,
+    toNbEventV1("scan", { type: "custom-unknown" }).eventType,
+  ];
+
+  assert.deepEqual(snapshot, [
+    "scan.scan_start",
+    "scan.case_end",
+    "recon.port_progress",
+    "recon.port_progress",
+    "web.case_start",
+    "web.case_end",
+    "web.web_scan_end",
+    "scan.unknown",
+  ]);
 });
 
 test("recon runtime events should satisfy core NB_EVENT v1 payload schema", async () => {
