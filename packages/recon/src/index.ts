@@ -41,6 +41,8 @@ export interface ReconScanConfig {
 
 export interface ReconScanOptions {
   onEvent?: (event: any) => void;
+  scanId?: string;
+  target?: string;
 }
 
 export interface ReconScanResult {
@@ -97,7 +99,14 @@ export async function runReconScan(config: ReconScanConfig, options?: ReconScanO
   let hosts = [...config.hosts];
   if (config.subdomains) {
     const candidates = buildSubdomainCandidates(config.subdomains.domain, config.subdomains.wordlist);
-    const resolved = await resolveHostnames(candidates, options?.onEvent);
+    const resolved = await resolveHostnames(candidates, (event) => {
+      options?.onEvent?.({
+        ...event,
+        type: "subdomain_progress",
+        scanId: config.scanId,
+        target: config.target,
+      });
+    });
     const validHosts = resolved.filter((item) => item.addresses.length > 0).map((item) => item.hostname);
     hosts = Array.from(new Set([...hosts, ...validHosts]));
   }
@@ -107,6 +116,8 @@ export async function runReconScan(config: ReconScanConfig, options?: ReconScanO
     timeoutMs: config.timeoutMs,
     grabBanner: config.grabBanner,
     onEvent: options?.onEvent,
+    scanId: config.scanId,
+    target: config.target,
   });
   const open = results.filter((item) => item.open).length;
 
@@ -272,7 +283,9 @@ export async function scanTcpPorts(
       const open = await isTcpPortOpen(target.host, target.port, timeoutMs, grabBanner);
       completed++;
       options.onEvent?.({
-        type: "recon:port-progress",
+        type: "port_progress",
+        scanId: options.scanId ?? "recon-scan",
+        target: options.target ?? "unknown",
         progress: { current: completed, total: targets.length },
         host: target.host,
         port: target.port,

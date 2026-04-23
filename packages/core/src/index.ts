@@ -22,6 +22,7 @@ import {
   type ScanOutcome,
 } from "@nullbunny/plugin-sdk";
 import { createProvider, type ProviderConfig, type ProviderHealthStatus } from "@nullbunny/providers";
+export * from "./events.js";
 
 export interface ScanConfig {
   id: string;
@@ -59,8 +60,8 @@ export interface ScanRunResult {
 
 export type ScanRunEvent =
   | { type: "scan_start"; scanId: string; target: string; total: number }
-  | { type: "case_start"; scanId: string; index: number; total: number; caseId: string; category: string }
-  | { type: "case_end"; scanId: string; index: number; total: number; caseId: string; outcome: ScanOutcome; latencyMs: number }
+  | { type: "case_start"; scanId: string; target: string; index: number; total: number; caseId: string; category: string }
+  | { type: "case_end"; scanId: string; target: string; index: number; total: number; caseId: string; outcome: ScanOutcome; latencyMs: number }
   | { type: "scan_end"; scanId: string; target: string; total: number; passed: number; flagged: number; errors: number };
 
 export interface RunScanOptions {
@@ -133,6 +134,7 @@ export async function runScan(
     options?.onEvent?.({
       type: "case_start",
       scanId: config.id,
+      target: config.target,
       index: index + 1,
       total: attacks.length,
       caseId: attack.id,
@@ -162,6 +164,7 @@ export async function runScan(
     options?.onEvent?.({
       type: "case_end",
       scanId: config.id,
+      target: config.target,
       index: index + 1,
       total: attacks.length,
       caseId: attack.id,

@@ -508,8 +508,10 @@ export async function runWebVulnScan(config: WebVulnScanConfig, options?: WebVul
 
     for (const vuln of enabledVulns) {
       options?.onEvent?.({
-        type: "vuln-scan:case-start",
-        vuln: vuln.type,
+        type: "case_start",
+        scanId: config.id,
+        target: config.target,
+        category: vuln.type,
         endpoint: `${endpoint.method} ${endpoint.url}`,
       });
 
@@ -542,8 +544,10 @@ export async function runWebVulnScan(config: WebVulnScanConfig, options?: WebVul
 
       completedCases++;
       options?.onEvent?.({
-        type: "vuln-scan:case-end",
-        vuln: vuln.type,
+        type: "case_end",
+        scanId: config.id,
+        target: config.target,
+        category: vuln.type,
         endpoint: `${endpoint.method} ${endpoint.url}`,
         detected: detectedCount > 0,
         progress: {
@@ -589,8 +593,10 @@ export async function runWebVulnScanFromEndpoints(
 
     for (const vuln of enabledVulns) {
       options?.onEvent?.({
-        type: "vuln-scan:case-start",
-        vuln: vuln.type,
+        type: "case_start",
+        scanId,
+        target,
+        category: vuln.type,
         endpoint: `${endpoint.method} ${endpoint.url}`,
       });
 
@@ -623,8 +629,10 @@ export async function runWebVulnScanFromEndpoints(
 
       completedCases++;
       options?.onEvent?.({
-        type: "vuln-scan:case-end",
-        vuln: vuln.type,
+        type: "case_end",
+        scanId,
+        target,
+        category: vuln.type,
         endpoint: `${endpoint.method} ${endpoint.url}`,
         detected: detectedCount > 0,
         progress: {
