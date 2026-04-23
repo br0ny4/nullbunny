@@ -4,7 +4,11 @@ import assert from "node:assert/strict";
 import { toNbEventV1 } from "../packages/cli/dist/index.js";
 import { runReconScan } from "../dist/recon/src/index.js";
 import { runWebVulnScanFromEndpoints } from "../packages/web/dist/index.js";
-import { isNbEventV1Payload } from "../dist/core/src/events.js";
+import {
+  NB_EVENT_TYPE_MAP,
+  isNbEventV1Payload,
+  normalizeNbEventType,
+} from "../dist/core/src/events.js";
 
 test("toNbEventV1 wraps scan events with unified schema", () => {
   const wrapped = toNbEventV1("scan", {
@@ -136,4 +140,12 @@ test("web vuln runtime events should satisfy core NB_EVENT v1 payload schema", a
       `invalid web event payload: ${JSON.stringify(event)}`,
     );
   }
+});
+
+test("core exports shared NB_EVENT mapping and normalization", () => {
+  assert.equal(typeof NB_EVENT_TYPE_MAP.scan.scan_start, "string");
+  assert.equal(NB_EVENT_TYPE_MAP.web["vuln-scan:case-end"], "web.case_end");
+  assert.equal(normalizeNbEventType("scan", "scan_start"), "scan.scan_start");
+  assert.equal(normalizeNbEventType("web", "vuln-scan:case-start"), "web.case_start");
+  assert.equal(normalizeNbEventType("scan", "custom-unknown"), "scan.unknown");
 });
