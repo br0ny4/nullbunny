@@ -39,10 +39,45 @@ export interface CliResult {
   output: string;
 }
 
+export type NbEventSource = "scan" | "recon" | "web";
+
+export interface NbEventV1 {
+  version: "1.0";
+  source: NbEventSource;
+  eventType: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+  compat: {
+    rawType: string;
+  };
+}
+
 export function createCli() {
   return {
     name: "nullbunny",
     run: runCli,
+  };
+}
+
+export function toNbEventV1(
+  source: NbEventSource,
+  rawEvent: unknown,
+): NbEventV1 {
+  const payload = isRecord(rawEvent)
+    ? (rawEvent as Record<string, unknown>)
+    : { value: rawEvent };
+  const rawType = typeof payload.type === "string" ? payload.type : "event";
+  const eventType = normalizeEventType(source, rawType);
+
+  return {
+    version: "1.0",
+    source,
+    eventType,
+    timestamp: new Date().toISOString(),
+    payload,
+    compat: {
+      rawType,
+    },
   };
 }
 
@@ -90,7 +125,7 @@ export async function runCli(
       jsonEvents
         ? {
             onEvent(event) {
-              console.log(`NB_EVENT ${JSON.stringify(event)}`);
+              emitNbEvent("scan", event);
             },
           }
         : undefined,
@@ -154,7 +189,7 @@ export async function runCli(
     const reportFormat = readReportFormat(flags);
 
     const jsonEvents = flags["json-events"] === true || flags["json-events"] === "true";
-    const onEvent = jsonEvents ? (event: any) => console.log(`NB_EVENT ${JSON.stringify(event)}`) : undefined;
+    const onEvent = jsonEvents ? (event: any) => emitNbEvent("recon", event) : undefined;
 
     const hosts = hostsValue
       .split(",")
@@ -230,10 +265,26 @@ export async function runCli(
     const baselinePath = readStringFlag(flags, "baseline");
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
+    const jsonEvents = flags["json-events"] === true || flags["json-events"] === "true";
 
     const { loadWebScanConfig, runWebScan } = await import("@nullbunny/web");
     const config = await loadWebScanConfig(configPath);
+    if (jsonEvents) {
+      emitNbEvent("web", {
+        type: "web_scan_start",
+        scanId: config.id,
+        target: config.target,
+      });
+    }
     const result = await runWebScan(config);
+    if (jsonEvents) {
+      emitNbEvent("web", {
+        type: "web_scan_end",
+        scanId: result.scanId,
+        target: result.target,
+        summary: result.summary,
+      });
+    }
     const output = formatScanRun(result as any);
 
     if (outputPath) {
@@ -297,7 +348,7 @@ export async function runCli(
     const outputPath = readStringFlag(flags, "output");
     const jsonEvents = flags["json-events"] === true || flags["json-events"] === "true";
 
-    const onEvent = jsonEvents ? (event: any) => console.log(`NB_EVENT ${JSON.stringify(event)}`) : undefined;
+    const onEvent = jsonEvents ? (event: any) => emitNbEvent("web", event) : undefined;
 
     if (crawlUrl) {
       const vulnsValue = readStringFlag(flags, "vulns");
@@ -563,6 +614,26 @@ async function writeReportFile(filePath: string, content: string): Promise<void>
   await writeFile(filePath, content, "utf8");
 }
 
+function emitNbEvent(source: NbEventSource, rawEvent: unknown): void {
+  console.log(`NB_EVENT ${JSON.stringify(toNbEventV1(source, rawEvent))}`);
+}
+
+function normalizeEventType(source: NbEventSource, rawType: string): string {
+  const withoutSourcePrefix = rawType.startsWith(`${source}:`)
+    ? rawType.slice(source.length + 1)
+    : rawType;
+  const normalized = withoutSourcePrefix
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return `${source}.${normalized || "event"}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function helpText(): string {
   const providerTypes = listSupportedProviders().map((entry) => entry.type).join(", ");
   return [
@@ -633,6 +704,7 @@ function helpText(): string {
     "  --baseline <path>        Path to previous web scan report",
     "  --output <path>          Path to write the report file",
     "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Flags (web crawl):",
     "  --url <url>              Target URL to start crawling",

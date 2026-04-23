@@ -163,7 +163,8 @@ node packages/cli/dist/index.js scan run --config ./examples/owasp-ollama/scan.j
 node packages/cli/dist/index.js scan run --config ./examples/rag-ollama/scan.json
 ```
 
-`--json-events true` 会把结构化事件按单行输出打印出来（前缀为 `NB_EVENT`），可用于 GUI / CI / 其他 Agent 消费进度与结果：
+`--json-events true` 会把结构化事件按单行输出打印出来（前缀为 `NB_EVENT`），可用于 GUI / CI / 其他 Agent 消费进度与结果。  
+当前统一为 `NB_EVENT v1` 包裹结构（`version/source/eventType/timestamp/payload`），并在 `compat.rawType` 中保留历史事件类型用于兼容：
 
 ```bash
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --json-events true | grep '^NB_EVENT '
@@ -190,6 +191,7 @@ node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format markdown --output ./reports/vuln-scan.md
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --report-format sarif --output ./reports/vuln-scan.sarif.json
 node packages/cli/dist/index.js web vuln-scan --config ./examples/web-vuln-scan/scan.json --json-events true --output ./reports/vuln-scan.json
+node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json --json-events true --output ./reports/web-scan.json
 ```
 
 写出报告：
