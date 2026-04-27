@@ -1,5 +1,6 @@
 import { connect } from "node:net";
 import { lookup } from "node:dns/promises";
+import type { NbEventV1Payload } from "@nullbunny/core";
 
 export interface HostPort {
   host: string;
@@ -40,7 +41,7 @@ export interface ReconScanConfig {
 }
 
 export interface ReconScanOptions {
-  onEvent?: (event: any) => void;
+  onEvent?: (event: NbEventV1Payload) => void;
   scanId?: string;
   target?: string;
 }
@@ -70,7 +71,12 @@ export function buildSubdomainCandidates(domain: string, prefixes: string[]): st
     .map((prefix) => `${prefix}.${normalizedDomain}`);
 }
 
-export async function resolveHostnames(hostnames: string[], onEvent?: (e: any) => void): Promise<HostResolution[]> {
+interface SubdomainProgressEvent {
+  type: string;
+  progress: { current: number; total: number };
+}
+
+export async function resolveHostnames(hostnames: string[], onEvent?: (e: SubdomainProgressEvent) => void): Promise<HostResolution[]> {
   let completed = 0;
   const results = await Promise.all(
     hostnames.map(async (hostname) => {

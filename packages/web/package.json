@@ -13,6 +13,7 @@
   ],
   "dependencies": {
     "@nullbunny/attacks": "workspace:*",
+    "@nullbunny/core": "workspace:*",
     "@nullbunny/judges": "workspace:*",
     "@nullbunny/mcp-bridge": "workspace:*",
     "@nullbunny/plugin-sdk": "workspace:*",

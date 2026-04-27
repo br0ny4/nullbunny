@@ -21,6 +21,7 @@ import {
   type ScanOutcome,
 } from "@nullbunny/plugin-sdk";
 import type { ProviderGenerateResult, ProviderHealthStatus } from "@nullbunny/providers";
+import type { NbEventV1Payload } from "@nullbunny/core";
 
 export type WebStep =
   | { action: "goto"; url: string }
@@ -126,7 +127,7 @@ export interface WebVulnScanConfig {
 }
 
 export interface WebVulnScanOptions {
-  onEvent?: (event: any) => void;
+  onEvent?: (event: NbEventV1Payload) => void;
 }
 
 export type WebVulnScanEntry = {

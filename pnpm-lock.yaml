@@ -207,7 +207,11 @@ importers:
 
   packages/providers: {}
 
-  packages/recon: {}
+  packages/recon:
+    dependencies:
+      '@nullbunny/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/reporters:
     dependencies:
@@ -220,6 +224,9 @@ importers:
       '@nullbunny/attacks':
         specifier: workspace:*
         version: link:../attacks
+      '@nullbunny/core':
+        specifier: workspace:*
+        version: link:../core
       '@nullbunny/judges':
         specifier: workspace:*
         version: link:../judges
