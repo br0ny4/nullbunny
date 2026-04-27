@@ -384,20 +384,23 @@ function runCliTask(taskId, args, cwd) {
     for (const line of text.split(/\r?\n/)) {
       if (!line) continue;
       if (line.startsWith('NB_EVENT ')) {
-        const payload = parseJsonSafe(line.slice('NB_EVENT '.length));
-        if (payload && payload.type === 'case_end' && typeof payload.index === 'number' && typeof payload.total === 'number') {
-          const pct = Math.max(0, Math.min(99, Math.round((payload.index / payload.total) * 99)));
+        const v1 = parseJsonSafe(line.slice('NB_EVENT '.length));
+        const et = v1?.eventType;
+        const inner = v1?.payload;
+
+        if (et === 'scan.case_end' && typeof inner?.index === 'number' && typeof inner?.total === 'number') {
+          const pct = Math.max(0, Math.min(99, Math.round((inner.index / inner.total) * 99)));
           updateTask(taskId, { progress: pct });
-        } else if (payload && payload.type === 'scan_start' && typeof payload.total === 'number') {
-          updateTask(taskId, { progress: 1, totalCases: payload.total });
-        } else if (payload && payload.type === 'vuln-scan:case-end' && payload.progress) {
-          const pct = Math.max(0, Math.min(99, Math.round((payload.progress.current / payload.progress.total) * 99)));
+        } else if (et === 'scan.scan_start' && typeof inner?.total === 'number') {
+          updateTask(taskId, { progress: 1, totalCases: inner.total });
+        } else if (et === 'web.case_end' && inner?.progress) {
+          const pct = Math.max(0, Math.min(99, Math.round((inner.progress.current / inner.progress.total) * 99)));
           updateTask(taskId, { progress: pct });
-        } else if (payload && payload.type === 'recon:port-progress' && payload.progress) {
-          const pct = Math.max(0, Math.min(99, Math.round((payload.progress.current / payload.progress.total) * 99)));
+        } else if (et === 'recon.port_progress' && inner?.progress) {
+          const pct = Math.max(0, Math.min(99, Math.round((inner.progress.current / inner.progress.total) * 99)));
           updateTask(taskId, { progress: pct });
-        } else if (payload && payload.type === 'recon:subdomain-progress' && payload.progress) {
-          const pct = Math.max(0, Math.min(99, Math.round((payload.progress.current / payload.progress.total) * 99)));
+        } else if (et === 'recon.subdomain_progress' && inner?.progress) {
+          const pct = Math.max(0, Math.min(99, Math.round((inner.progress.current / inner.progress.total) * 99)));
           updateTask(taskId, { progress: pct });
         }
         continue;

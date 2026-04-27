@@ -36,6 +36,34 @@ export interface NbEventV1Payload {
   [key: string]: unknown;
 }
 
+export interface NbEventV1Envelope {
+  version: string;
+  source: string;
+  eventType: string;
+  timestamp: string;
+  payload: NbEventV1Payload;
+  compat: { rawType: string };
+}
+
+const NB_EVENT_PREFIX = "NB_EVENT ";
+
+export function parseNbEventLine(line: string): NbEventV1Envelope | null {
+  if (!line.startsWith(NB_EVENT_PREFIX)) {
+    return null;
+  }
+
+  const json = line.slice(NB_EVENT_PREFIX.length);
+  try {
+    const parsed = JSON.parse(json);
+    if (!isRecord(parsed) || typeof parsed.version !== "string") {
+      return null;
+    }
+    return parsed as unknown as NbEventV1Envelope;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeNbEventType(source: NbEventSource, rawType: string): string {
   const normalizedRawType = rawType.trim().toLowerCase();
   const mapped = NB_EVENT_TYPE_MAP[source][normalizedRawType];

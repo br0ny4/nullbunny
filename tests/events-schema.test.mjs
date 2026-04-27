@@ -142,6 +142,29 @@ test("web vuln runtime events should satisfy core NB_EVENT v1 payload schema", a
   }
 });
 
+test("parseNbEventLine unwraps NB_EVENT v1 line and extracts progress", async () => {
+  const { parseNbEventLine } = await import("../dist/core/src/events.js");
+  if (typeof parseNbEventLine !== "function") {
+    assert.fail("parseNbEventLine is not yet exported from core/events");
+  }
+
+  const line =
+    'NB_EVENT {"version":"1.0","source":"scan","eventType":"scan.case_end","timestamp":"2026-01-01T00:00:00.000Z","payload":{"type":"case_end","scanId":"s1","target":"t1","index":5,"total":10,"caseId":"c1","outcome":"pass","latencyMs":100},"compat":{"rawType":"case_end"}}';
+
+  const parsed = parseNbEventLine(line);
+  assert.ok(parsed !== null, "should parse a valid NB_EVENT v1 line");
+  assert.equal(parsed.version, "1.0");
+  assert.equal(parsed.source, "scan");
+  assert.equal(parsed.eventType, "scan.case_end");
+  assert.equal(parsed.payload.type, "case_end");
+  assert.equal(parsed.payload.index, 5);
+  assert.equal(parsed.payload.total, 10);
+
+  assert.equal(parseNbEventLine("not an event"), null, "returns null for non-NB_EVENT lines");
+  assert.equal(parseNbEventLine("NB_EVENT not-json"), null, "returns null for invalid JSON");
+  assert.equal(parseNbEventLine(""), null, "returns null for empty line");
+});
+
 test("core exports shared NB_EVENT mapping and normalization", () => {
   assert.equal(typeof NB_EVENT_TYPE_MAP.scan.scan_start, "string");
   assert.equal(NB_EVENT_TYPE_MAP.web["vuln-scan:case-end"], "web.case_end");
