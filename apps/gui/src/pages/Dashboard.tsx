@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Cpu, HardDrive, ShieldAlert } from 'lucide-react';
+import type { Task } from '../store/tasks';
 
 const DashboardPerformanceChart = React.lazy(() => import('./DashboardPerformanceChart'));
 
@@ -7,6 +8,29 @@ type HistoryPoint = {
   time: string;
   cpu: number;
   memory: number;
+};
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  llm: 'LLM Scan',
+  'web-vuln': 'Web漏洞扫描',
+  recon: '信息收集',
+  providers: '供应商测试',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: '等待中',
+  running: '运行中',
+  completed: '已完成',
+  failed: '失败',
+  stopped: '已停止',
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  completed: 'bg-primary/20 text-primary',
+  failed: 'bg-danger/20 text-danger',
+  running: 'bg-warning/20 text-warning',
+  pending: 'bg-textMuted/20 text-textMuted',
+  stopped: 'bg-textMuted/20 text-textMuted',
 };
 
 export default function Dashboard() {
@@ -18,19 +42,26 @@ export default function Dashboard() {
   });
 
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch('/api/sys/stats');
-        const data = await res.json();
-        
+        const [statsRes, tasksRes] = await Promise.all([
+          fetch('/api/sys/stats'),
+          fetch('/api/tasks'),
+        ]);
+        const data = await statsRes.json();
+        const taskList: Task[] = await tasksRes.json();
+
         setStats(prev => ({
           ...prev,
           cpu: typeof data.cpuUsage === 'number' ? data.cpuUsage : prev.cpu,
           memory: typeof data.memoryUsage?.heapUsed === 'number' ? (data.memoryUsage.heapUsed / 1024 / 1024) : prev.memory,
           tasks: typeof data.activeTasks === 'number' ? data.activeTasks : prev.tasks,
         }));
+
+        setTasks(Array.isArray(taskList) ? taskList.slice(0, 10) : []);
 
         setHistory(prev => {
           const last = prev[prev.length - 1];
@@ -44,8 +75,8 @@ export default function Dashboard() {
       }
     };
 
-    fetchStats();
-    const interval = setInterval(fetchStats, 2000);
+    fetchData();
+    const interval = setInterval(fetchData, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -73,20 +104,21 @@ export default function Dashboard() {
         <div className="glass p-6 rounded-xl border border-border">
           <h3 className="text-xl font-semibold mb-6">最近活动 (Recent Activity)</h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-surface rounded-lg">
-              <div>
-                <p className="font-medium text-white">LLM Security Scan</p>
-                <p className="text-sm text-textMuted">Target: local-model</p>
-              </div>
-              <span className="px-3 py-1 bg-primary/20 text-primary rounded-full text-xs font-bold glow">Completed</span>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-surface rounded-lg">
-              <div>
-                <p className="font-medium text-white">Web Vulnerability Scan</p>
-                <p className="text-sm text-textMuted">Target: example.com</p>
-              </div>
-              <span className="px-3 py-1 bg-danger/20 text-danger rounded-full text-xs font-bold">Failed</span>
-            </div>
+            {tasks.length === 0 ? (
+              <p className="text-sm text-textMuted">暂无扫描任务</p>
+            ) : (
+              tasks.map((task) => (
+                <div key={task.id} className="flex items-center justify-between p-4 bg-surface rounded-lg">
+                  <div>
+                    <p className="font-medium text-white">{task.name}</p>
+                    <p className="text-sm text-textMuted">{TASK_TYPE_LABELS[task.type] ?? task.type}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_CLASS[task.status] ?? 'bg-textMuted/20 text-textMuted'}`}>
+                    {STATUS_LABELS[task.status] ?? task.status}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
