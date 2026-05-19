@@ -16,8 +16,10 @@ import { runAction } from "@nullbunny/action-app";
 // Temporary source import while the workspace package build pipeline is still minimal.
 // @ts-ignore
 import {
+  createScanSnapshot,
   formatScanRun,
   loadScanConfig,
+  loadScanSnapshot,
   normalizeNbEventType,
   runScan,
   type NbEventSource,
@@ -119,9 +121,17 @@ export async function runCli(
     const flags = parseFlags(rest);
     const configPath = readRequiredFlag(flags, "config");
     const baselinePath = readStringFlag(flags, "baseline");
+    const snapshotPath = readStringFlag(flags, "snapshot");
     const jsonEvents =
       flags["json-events"] === true || flags["json-events"] === "true";
     const config = await loadScanConfig(configPath);
+
+    if (snapshotPath) {
+      const snapshot = createScanSnapshot(config, configPath);
+      await mkdir(dirname(snapshotPath), { recursive: true });
+      await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2));
+    }
+
     const result = await runScan(
       config,
       jsonEvents
@@ -146,14 +156,15 @@ export async function runCli(
     }
 
     const newFlagged = await countNewFlagged(result as any, baselinePath);
+    const snapshotLine = snapshotPath ? `snapshot: ${snapshotPath}\n` : "";
     if (baselinePath) {
       const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
-      console.log(`${output}\n${baselineLine}`);
-      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${baselineLine}` };
+      console.log(`${output}\n${snapshotLine}${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${snapshotLine}${baselineLine}` };
     }
 
-    console.log(output);
-    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
+    console.log(`${output}${snapshotLine ? `\n${snapshotLine.trim()}` : ""}`);
+    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output: output + (snapshotLine ?? "") };
   }
 
   if (group === "action" && command === "run") {
@@ -175,6 +186,51 @@ export async function runCli(
 
     console.log(archiveMessage);
     return { exitCode: actionResult.exitCode, output: archiveMessage };
+  }
+
+  if (group === "scan" && command === "replay") {
+    const flags = parseFlags(rest);
+    const snapshotPath = readRequiredFlag(flags, "snapshot");
+    const baselinePath = readStringFlag(flags, "baseline");
+    const jsonEvents =
+      flags["json-events"] === true || flags["json-events"] === "true";
+    const reportFormat = readReportFormat(flags);
+    const outputPath = readStringFlag(flags, "output");
+
+    const snapshot = await loadScanSnapshot(snapshotPath);
+    const config = snapshot.config;
+
+    const result = await runScan(
+      config,
+      jsonEvents
+        ? {
+            onEvent(event) {
+              emitNbEvent("scan", event);
+            },
+          }
+        : undefined,
+    );
+
+    const output = formatScanRun(result);
+
+    if (outputPath) {
+      await writeReportFile(outputPath, renderReport(result, reportFormat));
+    }
+
+    if (result.summary.errors > 0 || result.provider.ok === false) {
+      console.error(output);
+      return { exitCode: 1, output };
+    }
+
+    const newFlagged = await countNewFlagged(result as any, baselinePath);
+    if (baselinePath) {
+      const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
+      console.log(`${output}\n${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${baselineLine}` };
+    }
+
+    console.log(output);
+    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
   }
 
   if (group === "recon" && command === "scan") {
@@ -645,6 +701,7 @@ function helpText(): string {
     "  providers list   List supported providers and default endpoints",
     "  providers test   Test provider connectivity and model availability",
     "  scan run         Execute an LLM security scan",
+    "  scan replay      Replay a scan from a saved snapshot file",
     "  action run       Execute GitHub Action workflow",
     "  web record-har   Record a web browsing session to HAR using Playwright",
     "  web analyze-har  Analyze a HAR file to discover LLM API endpoints",
@@ -663,10 +720,18 @@ function helpText(): string {
     "Flags (scan run / action run):",
     "  --config <path>          Path to scan.json config file",
     "  --baseline <path>        Path to previous scan report (for incremental scan)",
+    "  --snapshot <path>        Save resolved config as input snapshot for replay (scan only)",
     "  --output <path>          Path to write the report file",
     "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "  --archive-dir <path>     Directory to store archived reports (action only)",
+    "",
+    "Flags (scan replay):",
+    "  --snapshot <path>        Path to snapshot file captured from scan run",
+    "  --baseline <path>        Path to previous scan report (for incremental scan)",
+    "  --output <path>          Path to write the report file",
+    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Flags (recon scan):",
     "  --hosts <ips>            Comma-separated IPs/Hostnames (default: 127.0.0.1)",
@@ -725,6 +790,8 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --snapshot ./reports/snapshot.json",
+    "  node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
     "  node packages/cli/dist/index.js recon scan --hosts example.com --ports 80,443 --subdomains example.com --wordlist www,api,admin --banner true --output ./reports/recon.json",
     "  node packages/cli/dist/index.js web record-har --url https://example.com/login --har ./reports/web.har --steps ./examples/web/login.steps.json",

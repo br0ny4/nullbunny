@@ -24,6 +24,54 @@ import {
 import { createProvider, type ProviderConfig, type ProviderHealthStatus } from "@nullbunny/providers";
 export * from "./events.js";
 
+export interface ScanSnapshot {
+  version: "1.0";
+  createdAt: string;
+  configPath: string;
+  config: ScanConfig;
+}
+
+export function createScanSnapshot(
+  config: ScanConfig,
+  configPath: string,
+): ScanSnapshot {
+  return {
+    version: "1.0",
+    createdAt: new Date().toISOString(),
+    configPath,
+    config,
+  };
+}
+
+export async function loadScanSnapshot(
+  snapshotPath: string,
+): Promise<ScanSnapshot> {
+  const content = await readFile(snapshotPath, "utf8");
+  const parsed = JSON.parse(content) as unknown;
+
+  if (!isRecord(parsed)) {
+    throw new Error("Invalid snapshot: must be a JSON object");
+  }
+
+  if (parsed.version !== "1.0") {
+    throw new Error(
+      `Unsupported snapshot version: ${String(parsed.version)}`,
+    );
+  }
+
+  if (!isRecord(parsed.config)) {
+    throw new Error("Invalid snapshot: missing or invalid config");
+  }
+
+  return {
+    version: parsed.version as "1.0",
+    createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "",
+    configPath:
+      typeof parsed.configPath === "string" ? parsed.configPath : "",
+    config: parsed.config as ScanConfig,
+  };
+}
+
 export interface ScanConfig {
   id: string;
   target: string;

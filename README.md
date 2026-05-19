@@ -74,7 +74,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 - [x] **GUI 性能优化**：Dashboard 图表组件级懒加载、路由高亮、最小前端测试基建（Vitest + RTL）→ ✅ 已完成，GUI 7/7 测试
 - [x] **发布工程化**：建立 changelog/release notes 模板，固定每两周小版本节奏 → ✅ 已完成
 - [x] **规则质量门禁**：为攻击包新增 lint 校验器 (`lintManifest`) + 回归测试语料（13 条测试覆盖 4 个内置 pack）→ ✅ 已完成，`packages/plugin-sdk` 新增 lint 导出 + `tests/manifest-lint.test.mjs`
-- [ ] **CI 可信度增强**：新增"结果可重放"命令（基于输入快照复跑），保证审计可复现
+- [x] **CI 可信度增强**：新增 `scan replay` 命令 + `--snapshot` 输入快照（capture → replay 闭环，审计可复现）→ ✅ 已完成，core 新增 `ScanSnapshot` + CLI 新增 `scan replay`
 
 ### Phase 2（3-6 个月）企业接入与策略治理
 - [ ] **策略中心**：支持按业务线配置风险阈值、白名单、豁免过期时间（exception TTL）
@@ -205,6 +205,18 @@ node packages/cli/dist/index.js web scan --config ./examples/web-scan/scan.json 
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --output ./reports/basic.json
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md
 node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json
+```
+
+**输入快照与复盘重放（审计可复现）：**
+
+```bash
+# 运行时保存输入快照（用于后续复盘或审计重放）
+node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --snapshot ./reports/snapshot.json
+
+# 从快照重放（使用完全相同的输入配置）
+node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json
+node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json --baseline ./reports/baseline.json
+node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json --json-events true --output ./reports/replay.json
 ```
 
 ## GitHub Action
