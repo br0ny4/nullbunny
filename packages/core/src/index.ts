@@ -1,9 +1,9 @@
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 // Temporary until workspace dependencies are installed in this environment.
 // @ts-ignore
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join, extname } from "node:path";
 import {
   createBuiltinAttackRegistry,
   mergeAttackRegistries,
@@ -540,6 +540,72 @@ export async function loadScanPolicy(
       typeof parsed.businessLine === "string"
         ? parsed.businessLine
         : "default",
+  };
+}
+
+// ── Multi-Environment Baseline ──
+
+export async function resolveEnvBaselinePath(
+  baselinePath: string,
+  env: string,
+): Promise<string> {
+  try {
+    const s = await stat(baselinePath);
+    if (s.isDirectory()) {
+      return join(baselinePath, `${env}.json`);
+    }
+  } catch {
+    // Not a directory — treat as file path scheme
+  }
+
+  const dotIndex = baselinePath.lastIndexOf(".");
+  if (dotIndex === -1) {
+    return `${baselinePath}.${env}`;
+  }
+
+  return `${baselinePath.slice(0, dotIndex)}.${env}${baselinePath.slice(dotIndex)}`;
+}
+
+export async function countNewFlaggedWithEnv(
+  current: { cases?: Array<{ caseId: string; outcome: string }> },
+  baselinePath: string | undefined,
+  env: string | undefined,
+): Promise<{ newFlagged: number; resolvedPath?: string }> {
+  if (!baselinePath) {
+    return { newFlagged: 0 };
+  }
+
+  const resolvedPath = env
+    ? await resolveEnvBaselinePath(baselinePath, env)
+    : baselinePath;
+
+  let baseline: { cases: Array<{ caseId: string; outcome: string }> } | undefined;
+  try {
+    const content = await readFile(resolvedPath, "utf8");
+    const parsed = JSON.parse(content) as any;
+    if (parsed && Array.isArray(parsed.cases)) {
+      baseline = parsed;
+    }
+  } catch {
+    return { newFlagged: 0, resolvedPath };
+  }
+
+  if (!baseline) {
+    return { newFlagged: 0, resolvedPath };
+  }
+
+  const baselineFlagged = new Set(
+    baseline.cases
+      .filter((item: { outcome: string }) => item.outcome === "flagged")
+      .map((item: { caseId: string }) => item.caseId),
+  );
+  const currentFlagged = (current.cases ?? [])
+    .filter((item: { outcome: string }) => item.outcome === "flagged")
+    .map((item: { caseId: string }) => item.caseId);
+
+  return {
+    newFlagged: currentFlagged.filter((id) => !baselineFlagged.has(id)).length,
+    resolvedPath,
   };
 }
 

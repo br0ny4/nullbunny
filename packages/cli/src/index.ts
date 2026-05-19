@@ -17,12 +17,14 @@ import { runAction } from "@nullbunny/action-app";
 // @ts-ignore
 import {
   applyScanPolicy,
+  countNewFlaggedWithEnv,
   createScanSnapshot,
   formatScanRun,
   loadScanConfig,
   loadScanPolicy,
   loadScanSnapshot,
   normalizeNbEventType,
+  resolveEnvBaselinePath,
   runScan,
   type NbEventSource,
 } from "@nullbunny/core";
@@ -123,6 +125,7 @@ export async function runCli(
     const flags = parseFlags(rest);
     const configPath = readRequiredFlag(flags, "config");
     const baselinePath = readStringFlag(flags, "baseline");
+    const baselineEnv = readStringFlag(flags, "env");
     const snapshotPath = readStringFlag(flags, "snapshot");
     const policyPath = readStringFlag(flags, "policy");
     const jsonEvents =
@@ -177,13 +180,19 @@ export async function runCli(
       return { exitCode: 1, output };
     }
 
-    const newFlagged = await countNewFlagged(result as any, baselinePath);
+    const { newFlagged, resolvedPath } = await countNewFlaggedWithEnv(
+      result as any,
+      baselinePath,
+      baselineEnv,
+    );
+    const baselineDisplayPath = resolvedPath ?? baselinePath;
     const snapshotLine = snapshotPath ? `snapshot: ${snapshotPath}\n` : "";
     const exitCode = result.verdict?.passed === false ? 1 : (result.summary.flagged > 0 ? 2 : 0);
     const fullLines = [output, policyLine, snapshotLine.trim()].filter(Boolean).join("\n");
 
     if (baselinePath) {
-      const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
+      const envLabel = baselineEnv ? ` env=${baselineEnv}` : "";
+      const baselineLine = `baseline: ${baselineDisplayPath}${envLabel} new-flagged=${newFlagged}`;
       console.log(`${fullLines}\n${baselineLine}`);
       return { exitCode: newFlagged > 0 ? 2 : exitCode, output: `${fullLines}\n${baselineLine}` };
     }
@@ -217,6 +226,7 @@ export async function runCli(
     const flags = parseFlags(rest);
     const snapshotPath = readRequiredFlag(flags, "snapshot");
     const baselinePath = readStringFlag(flags, "baseline");
+    const baselineEnv = readStringFlag(flags, "env");
     const policyPath = readStringFlag(flags, "policy");
     const jsonEvents =
       flags["json-events"] === true || flags["json-events"] === "true";
@@ -266,11 +276,17 @@ export async function runCli(
       return { exitCode: 1, output };
     }
 
-    const newFlagged = await countNewFlagged(result as any, baselinePath);
+    const { newFlagged, resolvedPath } = await countNewFlaggedWithEnv(
+      result as any,
+      baselinePath,
+      baselineEnv,
+    );
+    const baselineDisplayPath = resolvedPath ?? baselinePath;
     const exitCode = result.verdict?.passed === false ? 1 : (result.summary.flagged > 0 ? 2 : 0);
     const fullLines = [output, policyLine].filter(Boolean).join("\n");
     if (baselinePath) {
-      const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
+      const envLabel = baselineEnv ? ` env=${baselineEnv}` : "";
+      const baselineLine = `baseline: ${baselineDisplayPath}${envLabel} new-flagged=${newFlagged}`;
       console.log(`${fullLines}\n${baselineLine}`);
       return { exitCode: newFlagged > 0 ? 2 : exitCode, output: `${fullLines}\n${baselineLine}` };
     }
@@ -765,7 +781,8 @@ function helpText(): string {
     "",
     "Flags (scan run / action run / scan replay):",
     "  --config <path>          Path to scan.json config file",
-    "  --baseline <path>        Path to previous scan report (for incremental scan)",
+    "  --baseline <path>        Path to baseline file or directory (for incremental scan)",
+    "  --env <name>             Environment scope for baseline (dev/staging/prod, selects <dir>/<env>.json)",
     "  --snapshot <path>        Save resolved config as input snapshot for replay (scan only)",
     "  --policy <path>          Path to policy.json file (thresholds + whitelist + exception TTL)",
     "  --output <path>          Path to write the report file",
@@ -837,6 +854,8 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baselines --env dev  # reads baselines/dev.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baselines --env staging",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --snapshot ./reports/snapshot.json",
     "  node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json",
     "  node packages/cli/dist/index.js action run --config ./examples/basic-ollama/scan.json --archive-dir ./reports/archive",
