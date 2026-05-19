@@ -369,6 +369,180 @@ function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null;
 }
 
+// ── Policy Center ──
+
+export interface WhitelistEntry {
+  caseId: string;
+  reason: string;
+  expiresAt: string; // ISO 8601
+}
+
+export interface PolicyThresholds {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface ScanPolicy {
+  id: string;
+  label: string;
+  thresholds: PolicyThresholds;
+  whitelist: WhitelistEntry[];
+  businessLine: string;
+}
+
+export interface PolicyVerdict {
+  passed: boolean;
+  reasons: string[];
+}
+
+export interface AppliedScanResult extends ScanRunResult {
+  verdict: PolicyVerdict;
+  whitelistedCaseIds: string[];
+}
+
+export function createScanPolicy(opts: {
+  id: string;
+  label?: string;
+  thresholds: PolicyThresholds;
+  whitelist?: WhitelistEntry[];
+  businessLine?: string;
+}): ScanPolicy {
+  return {
+    id: opts.id,
+    label: opts.label ?? opts.id,
+    thresholds: opts.thresholds,
+    whitelist: opts.whitelist ?? [],
+    businessLine: opts.businessLine ?? "default",
+  };
+}
+
+export function isWhitelistExpired(entry: WhitelistEntry): boolean {
+  return new Date(entry.expiresAt).getTime() <= Date.now();
+}
+
+export function applyScanPolicy(
+  result: ScanRunResult,
+  policy: ScanPolicy,
+): AppliedScanResult {
+  const now = Date.now();
+  const whitelistedIds: string[] = [];
+
+  const cases = result.cases.map((c) => {
+    const entry = policy.whitelist.find((w) => w.caseId === c.caseId);
+
+    if (entry && new Date(entry.expiresAt).getTime() > now) {
+      whitelistedIds.push(c.caseId);
+      return {
+        ...c,
+        outcome: "pass" as ScanOutcome,
+        reason: `whitelisted: ${entry.reason} (expires ${entry.expiresAt})`,
+      };
+    }
+
+    return c;
+  });
+
+  const flagged = cases.filter((c) => c.outcome === "flagged").length;
+  const reasons: string[] = [];
+
+  if (flagged > policy.thresholds.critical) {
+    reasons.push(`${flagged} flagged cases exceed threshold critical=${policy.thresholds.critical}`);
+  } else {
+    reasons.push(`flagged=${flagged} within threshold`);
+  }
+
+  return {
+    ...result,
+    summary: {
+      ...result.summary,
+      flagged,
+      passed: result.summary.total - flagged - result.summary.errors,
+    },
+    cases,
+    verdict: {
+      passed: flagged <= policy.thresholds.critical,
+      reasons,
+    },
+    whitelistedCaseIds: whitelistedIds,
+  };
+}
+
+export async function loadScanPolicy(
+  filePath: string,
+): Promise<ScanPolicy> {
+  const content = await readFile(filePath, "utf8");
+  const parsed = JSON.parse(content) as unknown;
+
+  if (!isRecord(parsed)) {
+    throw new Error("Invalid scan policy: must be a JSON object");
+  }
+
+  if (typeof parsed.id !== "string" || parsed.id.trim().length === 0) {
+    throw new Error("Invalid scan policy: missing or empty id");
+  }
+
+  const thresholds = parsed.thresholds;
+  if (
+    !isRecord(thresholds) ||
+    typeof thresholds.critical !== "number" ||
+    typeof thresholds.high !== "number" ||
+    typeof thresholds.medium !== "number" ||
+    typeof thresholds.low !== "number"
+  ) {
+    throw new Error(
+      "Invalid scan policy: thresholds must have critical/high/medium/low numbers",
+    );
+  }
+
+  if (
+    thresholds.critical < 0 ||
+    thresholds.high < 0 ||
+    thresholds.medium < 0 ||
+    thresholds.low < 0
+  ) {
+    throw new Error("Invalid scan policy: thresholds cannot be negative");
+  }
+
+  const whitelist: WhitelistEntry[] = [];
+  if (Array.isArray(parsed.whitelist)) {
+    for (const entry of parsed.whitelist) {
+      if (
+        isRecord(entry) &&
+        typeof entry.caseId === "string" &&
+        typeof entry.reason === "string" &&
+        typeof entry.expiresAt === "string"
+      ) {
+        whitelist.push({
+          caseId: entry.caseId,
+          reason: entry.reason,
+          expiresAt: entry.expiresAt,
+        });
+      }
+    }
+  }
+
+  return {
+    id: parsed.id as string,
+    label:
+      typeof parsed.label === "string" && parsed.label.trim().length > 0
+        ? parsed.label
+        : (parsed.id as string),
+    thresholds: {
+      critical: thresholds.critical as number,
+      high: thresholds.high as number,
+      medium: thresholds.medium as number,
+      low: thresholds.low as number,
+    },
+    whitelist,
+    businessLine:
+      typeof parsed.businessLine === "string"
+        ? parsed.businessLine
+        : "default",
+  };
+}
+
 function interpolateEnvVars(text: string): string {
   return text.replace(/\$\{([A-Za-z0-9_]+)\}/g, (full, key: string) => {
     const resolved = process.env[key];

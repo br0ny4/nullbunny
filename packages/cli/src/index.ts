@@ -16,9 +16,11 @@ import { runAction } from "@nullbunny/action-app";
 // Temporary source import while the workspace package build pipeline is still minimal.
 // @ts-ignore
 import {
+  applyScanPolicy,
   createScanSnapshot,
   formatScanRun,
   loadScanConfig,
+  loadScanPolicy,
   loadScanSnapshot,
   normalizeNbEventType,
   runScan,
@@ -122,6 +124,7 @@ export async function runCli(
     const configPath = readRequiredFlag(flags, "config");
     const baselinePath = readStringFlag(flags, "baseline");
     const snapshotPath = readStringFlag(flags, "snapshot");
+    const policyPath = readStringFlag(flags, "policy");
     const jsonEvents =
       flags["json-events"] === true || flags["json-events"] === "true";
     const config = await loadScanConfig(configPath);
@@ -132,7 +135,7 @@ export async function runCli(
       await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2));
     }
 
-    const result = await runScan(
+    const scanResult = await runScan(
       config,
       jsonEvents
         ? {
@@ -142,6 +145,25 @@ export async function runCli(
           }
         : undefined,
     );
+
+    let result: any = scanResult;
+    let policyLine = "";
+    if (policyPath) {
+      const policy = await loadScanPolicy(policyPath);
+      const applied = applyScanPolicy(scanResult, policy);
+      result = applied;
+      policyLine = [
+        `policy: ${policyPath}`,
+        `policy-verdict: ${applied.verdict.passed ? "PASS" : "FAIL"}`,
+        ...applied.verdict.reasons.map((r) => `  ${r}`),
+        applied.whitelistedCaseIds.length > 0
+          ? `whitelisted: ${applied.whitelistedCaseIds.join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
+
     const output = formatScanRun(result);
     const reportFormat = readReportFormat(flags);
     const outputPath = readStringFlag(flags, "output");
@@ -157,14 +179,17 @@ export async function runCli(
 
     const newFlagged = await countNewFlagged(result as any, baselinePath);
     const snapshotLine = snapshotPath ? `snapshot: ${snapshotPath}\n` : "";
+    const exitCode = result.verdict?.passed === false ? 1 : (result.summary.flagged > 0 ? 2 : 0);
+    const fullLines = [output, policyLine, snapshotLine.trim()].filter(Boolean).join("\n");
+
     if (baselinePath) {
       const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
-      console.log(`${output}\n${snapshotLine}${baselineLine}`);
-      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${snapshotLine}${baselineLine}` };
+      console.log(`${fullLines}\n${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : exitCode, output: `${fullLines}\n${baselineLine}` };
     }
 
-    console.log(`${output}${snapshotLine ? `\n${snapshotLine.trim()}` : ""}`);
-    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output: output + (snapshotLine ?? "") };
+    console.log(fullLines);
+    return { exitCode, output: fullLines };
   }
 
   if (group === "action" && command === "run") {
@@ -192,6 +217,7 @@ export async function runCli(
     const flags = parseFlags(rest);
     const snapshotPath = readRequiredFlag(flags, "snapshot");
     const baselinePath = readStringFlag(flags, "baseline");
+    const policyPath = readStringFlag(flags, "policy");
     const jsonEvents =
       flags["json-events"] === true || flags["json-events"] === "true";
     const reportFormat = readReportFormat(flags);
@@ -200,7 +226,7 @@ export async function runCli(
     const snapshot = await loadScanSnapshot(snapshotPath);
     const config = snapshot.config;
 
-    const result = await runScan(
+    const scanResult = await runScan(
       config,
       jsonEvents
         ? {
@@ -210,6 +236,24 @@ export async function runCli(
           }
         : undefined,
     );
+
+    let result: any = scanResult;
+    let policyLine = "";
+    if (policyPath) {
+      const policy = await loadScanPolicy(policyPath);
+      const applied = applyScanPolicy(scanResult, policy);
+      result = applied;
+      policyLine = [
+        `policy: ${policyPath}`,
+        `policy-verdict: ${applied.verdict.passed ? "PASS" : "FAIL"}`,
+        ...applied.verdict.reasons.map((r) => `  ${r}`),
+        applied.whitelistedCaseIds.length > 0
+          ? `whitelisted: ${applied.whitelistedCaseIds.join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
 
     const output = formatScanRun(result);
 
@@ -223,14 +267,16 @@ export async function runCli(
     }
 
     const newFlagged = await countNewFlagged(result as any, baselinePath);
+    const exitCode = result.verdict?.passed === false ? 1 : (result.summary.flagged > 0 ? 2 : 0);
+    const fullLines = [output, policyLine].filter(Boolean).join("\n");
     if (baselinePath) {
       const baselineLine = `baseline: ${baselinePath} new-flagged=${newFlagged}`;
-      console.log(`${output}\n${baselineLine}`);
-      return { exitCode: newFlagged > 0 ? 2 : 0, output: `${output}\n${baselineLine}` };
+      console.log(`${fullLines}\n${baselineLine}`);
+      return { exitCode: newFlagged > 0 ? 2 : exitCode, output: `${fullLines}\n${baselineLine}` };
     }
 
-    console.log(output);
-    return { exitCode: result.summary.flagged > 0 ? 2 : 0, output };
+    console.log(fullLines);
+    return { exitCode, output: fullLines };
   }
 
   if (group === "recon" && command === "scan") {
@@ -717,10 +763,11 @@ function helpText(): string {
     "  --base-url <url>         Provider API base URL (required for azure-openai)",
     "  --api-key <key>          Provider API key",
     "",
-    "Flags (scan run / action run):",
+    "Flags (scan run / action run / scan replay):",
     "  --config <path>          Path to scan.json config file",
     "  --baseline <path>        Path to previous scan report (for incremental scan)",
     "  --snapshot <path>        Save resolved config as input snapshot for replay (scan only)",
+    "  --policy <path>          Path to policy.json file (thresholds + whitelist + exception TTL)",
     "  --output <path>          Path to write the report file",
     "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",

@@ -1,0 +1,9 @@
+{
+  "id": "prod-strict",
+  "label": "Production Strict Policy",
+  "thresholds": { "critical": 0, "high": 2, "medium": 5, "low": 10 },
+  "whitelist": [
+    { "caseId": "known-fp-001", "reason": "Dev env noise", "expiresAt": "2027-12-31T00:00:00Z" }
+  ],
+  "businessLine": "backend-api"
+}

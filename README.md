@@ -77,7 +77,8 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 - [x] **CI 可信度增强**：新增 `scan replay` 命令 + `--snapshot` 输入快照（capture → replay 闭环，审计可复现）→ ✅ 已完成，core 新增 `ScanSnapshot` + CLI 新增 `scan replay`
 
 ### Phase 2（3-6 个月）企业接入与策略治理
-- [ ] **策略中心**：支持按业务线配置风险阈值、白名单、豁免过期时间（exception TTL）
+- [x] **策略中心**：支持按业务线配置风险阈值、白名单、豁免过期时间（exception TTL）→ ✅ 已完成，core 新增 `ScanPolicy`/`applyScanPolicy`/`loadScanPolicy` + CLI `--policy` 标志
+- [ ] **多环境基线**：支持 `dev/staging/prod` 独立 baseline，减少跨环境误报干扰
 - [ ] **多环境基线**：支持 `dev/staging/prod` 独立 baseline，减少跨环境误报干扰
 - [ ] **报告治理增强**：报告加入“修复建议 + 证据链 + 复测建议”三段式结构
 - [ ] **平台集成拓展**：补齐 GitLab CI/Jenkins 模板与文档，对齐企业落地路径
@@ -217,6 +218,28 @@ node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.j
 node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json
 node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json --baseline ./reports/baseline.json
 node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json --json-events true --output ./reports/replay.json
+```
+
+**策略中心（风险阈值 + 白名单 + 豁免TTL）：**
+
+```bash
+# 使用策略文件运行扫描（阈值判定 + 白名单过滤 + 过期豁免）
+node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --policy ./examples/policy-strict.json
+node packages/cli/dist/index.js scan replay --snapshot ./reports/snapshot.json --policy ./examples/policy-strict.json
+```
+
+示例策略文件 `examples/policy-strict.json`：
+
+```json
+{
+  "id": "prod-strict",
+  "label": "Production Strict Policy",
+  "thresholds": { "critical": 0, "high": 2, "medium": 5, "low": 10 },
+  "whitelist": [
+    { "caseId": "known-fp-001", "reason": "Dev env noise", "expiresAt": "2027-12-31T00:00:00Z" }
+  ],
+  "businessLine": "backend-api"
+}
 ```
 
 ## GitHub Action
