@@ -166,3 +166,113 @@ export function isExternalJudgePluginManifest(
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null;
 }
+
+export interface ManifestLintResult {
+  passed: boolean;
+  errors: string[];
+}
+
+export function lintManifest(manifest: unknown): ManifestLintResult {
+  const errors: string[] = [];
+
+  if (!isRecord(manifest)) {
+    return { passed: false, errors: ["manifest must be a JSON object"] };
+  }
+
+  // Manifest id
+  if (typeof manifest.id !== "string" || manifest.id.trim().length === 0) {
+    errors.push("manifest id is empty or missing");
+  }
+
+  // Attack entries
+  if (Array.isArray(manifest.attacks)) {
+    lintAttacks(manifest.attacks, errors);
+  }
+
+  // Judge entries
+  if (Array.isArray(manifest.judges)) {
+    lintJudges(manifest.judges, errors);
+  }
+
+  return {
+    passed: errors.length === 0,
+    errors,
+  };
+}
+
+function lintAttacks(attacks: unknown[], errors: string[]): void {
+  const seenIds = new Set<string>();
+
+  for (let i = 0; i < attacks.length; i++) {
+    const attack = attacks[i];
+    const prefix = `attacks[${i}]`;
+
+    if (!isRecord(attack)) {
+      errors.push(`${prefix}: must be an object`);
+      continue;
+    }
+
+    // Check id
+    const id = attack.id;
+    if (typeof id !== "string" || id.trim().length === 0) {
+      errors.push(`${prefix}: attack id is empty`);
+    } else {
+      // Check naming convention (must contain /)
+      if (!id.includes("/")) {
+        errors.push(`${prefix} (${id}): attack id must contain '/' as category/name separator`);
+      }
+      // Check duplicate
+      if (seenIds.has(id)) {
+        errors.push(`${prefix} (${id}): duplicate attack id`);
+      }
+      seenIds.add(id);
+    }
+
+    // Check category
+    if (typeof attack.category !== "string" || attack.category.trim().length === 0) {
+      errors.push(`${prefix} (${attack.id || "?"}): category is empty`);
+    }
+
+    // Check prompt
+    if (typeof attack.prompt !== "string" || attack.prompt.trim().length === 0) {
+      errors.push(`${prefix} (${attack.id || "?"}): prompt is empty`);
+    }
+  }
+}
+
+function lintJudges(judges: unknown[], errors: string[]): void {
+  const seenIds = new Set<string>();
+
+  for (let i = 0; i < judges.length; i++) {
+    const judge = judges[i];
+    const prefix = `judges[${i}]`;
+
+    if (!isRecord(judge)) {
+      errors.push(`${prefix}: must be an object`);
+      continue;
+    }
+
+    // Check id
+    const id = judge.id;
+    if (typeof id !== "string" || id.trim().length === 0) {
+      errors.push(`${prefix}: judge id is empty`);
+    } else {
+      if (seenIds.has(id)) {
+        errors.push(`${prefix} (${id}): duplicate judge id`);
+      }
+      seenIds.add(id);
+    }
+
+    // Check mode-specific rules
+    if (judge.mode === "keyword") {
+      if (
+        !Array.isArray(judge.failOnKeywords) ||
+        judge.failOnKeywords.length === 0
+      ) {
+        errors.push(
+          `${prefix} (${judge.id || "?"}): keyword judge must have non-empty failOnKeywords`,
+        );
+      }
+    }
+  }
+}

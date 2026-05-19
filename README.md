@@ -73,7 +73,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 - [x] **核心引擎稳定化**：统一 `scan/web/recon` 事件模型，沉淀 `NB_EVENT` v1 schema（含版本号与兼容策略）→ ✅ 已完成，形成 core/cli/web/recon 完整闭环
 - [x] **GUI 性能优化**：Dashboard 图表组件级懒加载、路由高亮、最小前端测试基建（Vitest + RTL）→ ✅ 已完成，GUI 7/7 测试
 - [x] **发布工程化**：建立 changelog/release notes 模板，固定每两周小版本节奏 → ✅ 已完成
-- [ ] **规则质量门禁**：为攻击包新增 lint + 回归测试语料，避免"规则更新即引入噪音"
+- [x] **规则质量门禁**：为攻击包新增 lint 校验器 (`lintManifest`) + 回归测试语料（13 条测试覆盖 4 个内置 pack）→ ✅ 已完成，`packages/plugin-sdk` 新增 lint 导出 + `tests/manifest-lint.test.mjs`
 - [ ] **CI 可信度增强**：新增"结果可重放"命令（基于输入快照复跑），保证审计可复现
 
 ### Phase 2（3-6 个月）企业接入与策略治理
