@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Cpu, HardDrive, ShieldAlert } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Activity, Cpu, HardDrive, Plus, ShieldAlert } from 'lucide-react';
 import type { Task } from '../store/tasks';
 
 const DashboardPerformanceChart = React.lazy(() => import('./DashboardPerformanceChart'));
@@ -82,7 +83,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold tracking-tight text-white mb-8">仪表盘 Overview</h2>
+      <div className="flex items-center justify-between mb-8">
+        <h2 className="text-3xl font-bold tracking-tight text-white">仪表盘 Overview</h2>
+        <Link
+          to="/tasks/new"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primaryHover text-black font-semibold rounded-lg shadow-lg glow transition-all"
+        >
+          <Plus className="w-5 h-5" />
+          新建扫描
+        </Link>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="活跃任务" value={stats.tasks} icon={<Activity className="text-primary" />} />
@@ -108,7 +118,11 @@ export default function Dashboard() {
               <p className="text-sm text-textMuted">暂无扫描任务</p>
             ) : (
               tasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 bg-surface rounded-lg">
+                <Link
+                  key={task.id}
+                  to={`/tasks/${task.id}`}
+                  className="flex items-center justify-between p-4 bg-surface rounded-lg hover:border-primary/50 border border-transparent transition-all block"
+                >
                   <div>
                     <p className="font-medium text-white">{task.name}</p>
                     <p className="text-sm text-textMuted">{TASK_TYPE_LABELS[task.type] ?? task.type}</p>
@@ -116,7 +130,7 @@ export default function Dashboard() {
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_CLASS[task.status] ?? 'bg-textMuted/20 text-textMuted'}`}>
                     {STATUS_LABELS[task.status] ?? task.status}
                   </span>
-                </div>
+                </Link>
               ))
             )}
           </div>

@@ -14,3 +14,4 @@ packages/*/src/*.js.map
 packages/*/src/*.d.ts
 packages/*/src/*.d.ts.map
 examples/local-siliconflow/
+优化项目并更新GitHub README.md
