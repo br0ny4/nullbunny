@@ -79,7 +79,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 ### Phase 2（3-6 个月）企业接入与策略治理
 - [x] **策略中心**：支持按业务线配置风险阈值、白名单、豁免过期时间（exception TTL）→ ✅ 已完成，core 新增 `ScanPolicy`/`applyScanPolicy`/`loadScanPolicy` + CLI `--policy` 标志
 - [x] **多环境基线**：支持 `dev/staging/prod` 独立 baseline，减少跨环境误报干扰 → ✅ 已完成，core 新增 `resolveEnvBaselinePath`/`countNewFlaggedWithEnv` + CLI `--env` 标志
-- [ ] **报告治理增强**：报告加入“修复建议 + 证据链 + 复测建议”三段式结构
+- [x] **报告治理增强**：报告加入"修复建议 + 证据链 + 复测建议"三段式结构 → ✅ 已完成，新增 `renderEnhancedReport` + `--report-format enhanced`
 - [ ] **平台集成拓展**：补齐 GitLab CI/Jenkins 模板与文档，对齐企业落地路径
 - [ ] **凭据与密钥安全**：Provider 配置支持本地加密存储和 Secret 扫描联动
 

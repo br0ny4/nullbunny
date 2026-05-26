@@ -726,6 +726,10 @@ function readReportFormat(
     return "sarif";
   }
 
+  if (value === "enhanced") {
+    return "enhanced";
+  }
+
   return "json";
 }
 
@@ -786,7 +790,7 @@ function helpText(): string {
     "  --snapshot <path>        Save resolved config as input snapshot for replay (scan only)",
     "  --policy <path>          Path to policy.json file (thresholds + whitelist + exception TTL)",
     "  --output <path>          Path to write the report file",
-    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --report-format <type>   Report format (json, markdown, sarif, enhanced) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "  --archive-dir <path>     Directory to store archived reports (action only)",
     "",
@@ -794,7 +798,7 @@ function helpText(): string {
     "  --snapshot <path>        Path to snapshot file captured from scan run",
     "  --baseline <path>        Path to previous scan report (for incremental scan)",
     "  --output <path>          Path to write the report file",
-    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --report-format <type>   Report format (json, markdown, sarif, enhanced) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Flags (recon scan):",
@@ -805,7 +809,7 @@ function helpText(): string {
     "  --banner <bool>          Whether to grab service banners (true/false)",
     "  --detect-middleware <bool> Whether to detect default middleware configs (true/false)",
     "  --output <path>          Path to write the report file",
-    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --report-format <type>   Report format (json, markdown, sarif, enhanced) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Flags (web record-har):",
@@ -822,7 +826,7 @@ function helpText(): string {
     "  --config <path>          Path to web-scan.json config file",
     "  --baseline <path>        Path to previous web scan report",
     "  --output <path>          Path to write the report file",
-    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --report-format <type>   Report format (json, markdown, sarif, enhanced) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Flags (web crawl):",
@@ -841,7 +845,7 @@ function helpText(): string {
     "  --max-pages <num>        Maximum pages to crawl if using --crawl-url",
     "  --timeout-ms <ms>        Timeout for requests",
     "  --output <path>          Path to write the report file",
-    "  --report-format <type>   Report format (json, markdown, sarif) (default: json)",
+    "  --report-format <type>   Report format (json, markdown, sarif, enhanced) (default: json)",
     "  --json-events <bool>     Emit structured JSON events prefixed with NB_EVENT (true/false)",
     "",
     "Examples:",
@@ -853,6 +857,7 @@ function helpText(): string {
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format markdown --output ./reports/basic.md",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format sarif --output ./reports/basic.sarif.json",
+    "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --report-format enhanced --output ./reports/basic.enhanced.md",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baseline.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baselines --env dev  # reads baselines/dev.json",
     "  node packages/cli/dist/index.js scan run --config ./examples/basic-ollama/scan.json --baseline ./reports/baselines --env staging",
