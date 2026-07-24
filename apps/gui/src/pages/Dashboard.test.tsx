@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
@@ -127,5 +127,6 @@ describe('Dashboard', () => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
 });

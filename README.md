@@ -15,13 +15,14 @@ NullBunny 在传统 Web 渗透测试的基础上，**率先深度覆盖 AI 应�
 - **RAG 上下文污染** — 独家 RAG Context Poisoning 攻击包（18 用例 / 5 大类），覆盖文档注入、检索操纵、嵌入混淆、来源伪造、RAG 投毒
 - **Agentic AI 攻击** — 独家 Agentic AI 攻击包（21 用例 / 5 大类），覆盖工具滥用、权限提升、数据窃取、安全绕过
 - **AI 黑盒渗透** — 从 HAR 流量自动识别 LLM 接口，注入攻击 payload 并判定响应，无需源码
+- **Prompt 注入检测** — 覆盖直接注入（DAN/Jailbreak）、间接注入（RAG 文档投毒）、分隔符注入等 7 类攻击向量，支持 Web Vuln Scan 管线集成
 - **多模型 Provider** — 原生支持 Ollama / OpenAI-compatible / Anthropic / DeepSeek / Gemini / Azure OpenAI / SiliconFlow / Groq / Together / Mistral / OpenRouter / Alibaba / Volcengine / Tencent / Perplexity / xAI / Cohere 等 17 种 Provider 开箱即用
 
 ## 功能
 
 - **Web GUI**：提供极客风的现代化控制台，直观展示扫描进度、性能指标和历史报告，并支持可视化配置大模型 API Key
 - **Scans**：按配置文件批量执行攻击用例并进行判定（judge）
-- **Web Vuln Scan**：传统 Web 漏洞探测（XXE / XSS / SQLi / SSRF / Path Traversal / CMDi / 文件上传 / IDOR 越权），基于 HAR 端点自动注入 payload
+- **Web Vuln Scan**：传统 Web 漏洞探测（XXE / XSS / SQLi / SSRF / Path Traversal / CMDi / 文件上传 / IDOR 越权 / Prompt 注入），基于 HAR 端点自动注入 payload
 - **Web 被动扫描**：无头浏览器登录并录制 HAR，AI 黑盒扫描
 - **Providers**：原生接入支持 17 种 LLM 提供商（Ollama, OpenAI-compatible, Anthropic, DeepSeek, Gemini, Azure OpenAI, SiliconFlow, Groq, Together, Mistral, OpenRouter, Alibaba, Volcengine, Tencent, Perplexity, xAI, Cohere）
 - **Reports**：输出 JSON / Markdown / SARIF 报告（SARIF 可直接导入 GitHub Code Scanning）
@@ -43,7 +44,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 ### 核心能力（已可用）
 - [x] 扫描引擎：JSON 配置驱动、判定规则、JSON/Markdown/SARIF 报告
 - [x] AI 安全：OWASP LLM Top 10 + RAG 上下文污染 + Agentic AI 攻击包
-- [x] Web 安全：HAR 录制/分析、黑盒扫描、XXE/XSS/SQLi/SSRF/Path Traversal/CMDi/文件上传
+- [x] Web 安全：HAR 录制/分析、黑盒扫描、XXE/XSS/SQLi/SSRF/Path Traversal/CMDi/文件上传/Prompt 注入
 - [x] 资产发现：子域枚举、端口扫描、Banner 与中间件识别
 - [x] GUI 控制台：任务编排、实时日志/指标、报告查看、Marketplace 扩展
 - [x] 工程集成：GitHub Action、Baseline 增量阻断、SARIF 对接 Code Scanning
@@ -55,6 +56,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 - [x] GUI 性能优化：路由级懒加载 + 图表组件级懒加载 + 侧边栏路由高亮
 - [x] 发布工程化：CHANGELOG + Release Notes 模板 + 双周发布流程
 - [x] GUI 全页面消除 mock 数据，全部对接真实后端 API（含测试覆盖）
+- [x] Prompt 注入检测引擎上线：Web Vuln Scan 管线新增 `prompt-injection` 类型（7 类攻击向量 + 多层判定逻辑）
 - [ ] Web AI 黑盒扫描的端点识别与参数推断增强（适配更多非标准 API）
 - [ ] 发布体验优化（`npm -g` + 跨平台安装脚本）
 
@@ -94,7 +96,7 @@ NullBunny 的终极目标是成为一个 **开箱即用、可持续演进、可�
 
 - [x] **双周迭代**：每 2 周滚动更新路线图状态（Done/In Progress/Blocked）
 - [x] **版本纪律**：遵循 SemVer，破坏性变更必须附迁移指南
-- [x] **质量闸门**：新增功能必须同时满足类型检查、单测、关键 E2E 冒烟（当前 17 后端 + 7 GUI 测试）
+- [x] **质量闸门**：新增功能必须同时满足类型检查、单测、关键 E2E 冒烟（当前 65 后端 + 9 GUI 测试）
 - [x] **文档即交付**：功能合入必须同步 README + 示例配置 + CI 用例
 - [ ] **数据化决策**：以误报率、扫描耗时、CI 阻断准确率作为优先级依据
 
